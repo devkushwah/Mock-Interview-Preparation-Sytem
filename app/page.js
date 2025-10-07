@@ -1,8 +1,14 @@
 import React from 'react'
+import { UserButton } from '@stackframe/stack'
+
 
 const page = () => {
   return (
-    <div>page </div>
+    <div>
+      page 
+        <UserButton />
+
+      </div>
   )
 }
 
