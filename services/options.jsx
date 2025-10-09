@@ -7,7 +7,7 @@ export const ExpertsList = [
 
     {
         name: "TopicWise Preparation",
-        description: "Engage in thoughtful discussions to enhance your communication and critical thinking skills.",
+        description: "Engage in thoughtful interviews to enhance your communication and critical thinking skills.",
         icon: "/icons/topicwiseprep.jpg"
     },
 

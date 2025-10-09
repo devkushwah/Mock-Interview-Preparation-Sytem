@@ -15,7 +15,7 @@ export const createInterviewAnalytics = async (analyticsData) => {
     
     const analytics = {
       userId: analyticsData.userId,
-      discussionId: analyticsData.discussionId,
+      interviewId: analyticsData.interviewId,
       // Performance metrics
       totalQuestions: analyticsData.totalQuestions || 0,
       correctAnswers: analyticsData.correctAnswers || 0,

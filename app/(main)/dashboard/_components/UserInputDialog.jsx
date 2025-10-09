@@ -51,7 +51,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
       
       console.log("Discussion room created:", discussionData.id);
       
-      // Navigate to interview room
+      // Navigate to VOICE interview room
       router.push(`/dashboard/interview/${discussionData.id}`);
       
       setIsOpen(false);
@@ -78,11 +78,11 @@ const UserInputDialog = ( {children, interviewType} ) => {
       <DialogTrigger asChild onClick={() => setIsOpen(true)}>{children}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Start Interview</DialogTitle>
+          <DialogTitle>Start Voice Interview</DialogTitle>
           <DialogDescription>
             <div className='flex flex-col gap-4'>
                 <h2 className='text-black'>
-                    You are about to start a {interviewType.name} interview.
+                    You are about to start a {interviewType.name} voice interview.
                 </h2>
                 <textarea 
                     onChange={(e) => setTopic(e.target.value)} 
@@ -138,7 +138,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
                     disabled={(!topic || !selectExpert || isCreating)}
                     onClick={handleStartInterview}
                   >
-                    {isCreating ? 'Starting Interview...' : 'Start Interview'}
+                    {isCreating ? 'Starting Voice Interview...' : 'Start Voice Interview'}
                   </button>
                 </div>
             </div>
