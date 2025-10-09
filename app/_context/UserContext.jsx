@@ -1,6 +1,9 @@
-import React from 'react'
-import { createContext } from 'react'
+'use client'
 
+import { createContext } from 'react';
 
-
-export const UserContext = createContext();
+export const UserContext = createContext({
+  userData: null,
+  setUserData: () => {},
+  isCreatingUser: false
+});

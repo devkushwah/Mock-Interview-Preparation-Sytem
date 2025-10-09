@@ -12,7 +12,7 @@
     "@stackframe/stack": "^2.8.36",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "convex": "^1.27.1",
+    "firebase": "^10.7.1",
     "lucide-react": "^0.544.0",
     "next": "15.5.3",
     "react": "19.1.0",

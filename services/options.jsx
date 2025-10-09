@@ -26,17 +26,17 @@ export const ExpertsList = [
 
 export const Interviewer = [
     {
-        name: 'John Doe',
+        name: 'Sarah Mitchell',
         avatar: '/avatars/avatar1.jpg'
     },
 
      {
-        name: 'John Doe',
+        name: 'David Chen',
         avatar: '/avatars/avatar2.jpg'
     },
 
      {
-        name: 'John Doe',
+        name: 'Alex Johnson',
         avatar: '/avatars/avatar3.jpg'
     }
 ]
