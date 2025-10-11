@@ -12,8 +12,10 @@ import {
 import { Interviewer } from '@/services/options'
 import { DialogClose } from '@radix-ui/react-dialog';
 import { UserContext } from '@/app/_context/UserContext';
-import { createDiscussionRoom } from '@/services/firebase/discussionService';
+import { createDiscussionRoom } from '@/services/firebase/discussionService'; // Fixed import
 import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebaseConfig'
+import { doc, getDoc } from 'firebase/firestore';
 
 const UserInputDialog = ( {children, interviewType} ) => {
   const { userData } = useContext(UserContext);
@@ -37,7 +39,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
 
   const handleStartInterview = async () => {
     if (!topic || !selectExpert || !userData?.id) return;
-    
+
     setIsCreating(true);
     try {
       const discussionData = await createDiscussionRoom({
@@ -45,15 +47,23 @@ const UserInputDialog = ( {children, interviewType} ) => {
         practiceOption: interviewType.name,
         topic: topic,
         interviewerName: selectExpert,
-        difficulty: 'medium', // Default difficulty
-        tags: extractTags(topic), // Extract tags from topic
+        difficulty: 'medium',
+        tags: extractTags(topic),
       });
-      
+
       console.log("Discussion room created:", discussionData.id);
-      
-      // Navigate to VOICE interview room
+
+      // Fetch and log the document by ID for confirmation
+      const docRef = doc(db, 'discussionRooms', discussionData.id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        console.log("Fetched discussion room data by ID:", docSnap.data());
+      } else {
+        console.log("No discussion room found with this ID!");
+      }
+
       router.push(`/dashboard/interview/${discussionData.id}`);
-      
+
       setIsOpen(false);
       resetForm();
     } catch (error) {
