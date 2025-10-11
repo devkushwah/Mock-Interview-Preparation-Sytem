@@ -11,7 +11,8 @@ import {
   getDoc,
   orderBy, 
   limit,
-  arrayUnion 
+  arrayUnion,
+  serverTimestamp 
 } from 'firebase/firestore';
 
 export const createDiscussionRoom = async (discussionData) => {
@@ -76,42 +77,36 @@ export const getUserDiscussions = async (userId, limitCount = 10) => {
   }
 };
 
-export const addMessageToConversation = async (discussionId, message) => {
+export const getDiscussionById = async (discussionId) => {
   try {
-    const discussionRef = doc(db, 'discussionRooms', discussionId);
+    const docRef = doc(db, 'discussionRooms', discussionId);
+    const docSnap = await getDoc(docRef);
     
-    const messageData = {
-      id: Date.now().toString(),
-      content: message.content,
-      sender: message.sender, // 'user' or 'interviewer'
-      timestamp: new Date().toISOString(),
-      type: message.type || 'voice', // voice, text, audio, image
-      metadata: message.metadata || {}
-    };
-    
-    // Get current discussion to update counters
-    const discussionDoc = await getDoc(discussionRef);
-    const currentData = discussionDoc.data();
-    
-    let updateData = {
-      conversation: arrayUnion(messageData),
-      updatedAt: new Date().toISOString()
-    };
-    
-    // Update question counter if it's from interviewer
-    if (message.sender === 'interviewer') {
-      updateData.totalQuestions = (currentData.totalQuestions || 0) + 1;
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() };
+    } else {
+      return null;
     }
-    
-    await updateDoc(discussionRef, updateData);
-    
-    console.log('Message added to conversation:', messageData.id);
-    return messageData;
   } catch (error) {
-    console.error('Error adding message to conversation:', error);
+    console.error('Error getting discussion:', error);
     throw error;
   }
 };
+
+export const updateDiscussionStatus = async (discussionId, status) => {
+  try {
+    const docRef = doc(db, 'discussionRooms', discussionId);
+    await updateDoc(docRef, {
+      status: status,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error updating discussion status:', error);
+    throw error;
+  }
+};
+
+
 
 export const completeDiscussion = async (discussionId, feedback = null, score = null) => {
   try {
@@ -137,24 +132,6 @@ export const completeDiscussion = async (discussionId, feedback = null, score = 
     }
   } catch (error) {
     console.error('Error completing discussion:', error);
-    throw error;
-  }
-};
-
-export const getDiscussionById = async (discussionId) => {
-  try {
-    const discussionRef = doc(db, 'discussionRooms', discussionId);
-    const discussionDoc = await getDoc(discussionRef);
-    
-    if (discussionDoc.exists()) {
-      return {
-        id: discussionDoc.id,
-        ...discussionDoc.data()
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting discussion by ID:', error);
     throw error;
   }
 };
