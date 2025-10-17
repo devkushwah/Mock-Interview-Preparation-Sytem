@@ -21,6 +21,8 @@ const InterviewPage = () => {
   const [recordRTCReady, setRecordRTCReady] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [isConnecting, setIsConnecting] = useState(false)
+  const [transcriptionError, setTranscriptionError] = useState(null)
+  const [isTranscribing, setIsTranscribing] = useState(false)
   
   const recorder = useRef(null)
   const silenceTimeout = useRef(null)
@@ -123,6 +125,8 @@ const InterviewPage = () => {
       if (typeof window !== "undefined" && typeof navigator !== "undefined") {
         navigator.mediaDevices.getUserMedia({ audio: true })
           .then((stream) => {
+            console.log('🎙️ Microphone stream obtained:', stream.getAudioTracks())
+
             recorder.current = new window.RecordRTC(stream, {
               type: 'audio',
               mimeType: 'audio/webm;codecs=pcm',
@@ -133,18 +137,42 @@ const InterviewPage = () => {
               bufferSize: 4096,
               audioBitsPerSecond: 128000,
               ondataavailable: async (blob) => {
-                // Reset the silence detection timer on audio input
+                console.log('🎤 Audio chunk received:', blob.size, 'bytes')
+                
                 if (silenceTimeout.current) {
                   clearTimeout(silenceTimeout.current)
                 }
 
-                const buffer = await blob.arrayBuffer()
-                console.log(buffer)
-                
-                // Restart the silence detection timer
+                try {
+                  setIsTranscribing(true)
+                  console.log('📤 Sending to Deepgram API...')
+                  
+                  const resp = await fetch('/api/deepgram/transcribe', {
+                    method: 'POST',
+                    headers: { Accept: 'application/json' },
+                    body: blob
+                  })
+
+                  console.log('📡 Deepgram response status:', resp.status)
+                  const json = await resp.json()
+                  console.log('📝 Deepgram response:', json)
+                  
+                  if (json.transcript && json.transcript.trim()) {
+                    console.log('✅ Transcript received:', json.transcript)
+                    setTranscript(prev => (prev ? prev + ' ' + json.transcript : json.transcript))
+                  } else if (json.error) {
+                    console.error('❌ Deepgram error:', json.error)
+                    setTranscriptionError('Transcription error: ' + json.error)
+                  }
+                } catch (err) {
+                  console.error('🚨 Transcription request failed:', err)
+                  setTranscriptionError('Transcription request failed: ' + err.message)
+                } finally {
+                  setIsTranscribing(false)
+                }
+
                 silenceTimeout.current = setTimeout(() => {
-                  console.log("User stopped talking")
-                  // Handle user stopped talking (e.g., send final transcript, stop recording, etc.)
+                  console.log('🔇 User stopped talking')
                 }, 2000)
               },
             })
@@ -205,6 +233,15 @@ const InterviewPage = () => {
                   className='h-[80px] w-[80px] rounded-full object-cover animate-pulse'
               />
               <h2 className="text-gray-800">{discussionRoomData?.interviewerName}</h2>
+              
+              {/* Recording status indicator */}
+              {enableMic && (
+                <div className="absolute top-4 left-4 flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-red-600">Recording</span>
+                </div>
+              )}
+              
               <div className='p-5 bg-gray-200 px-10 rounded-lg absolute bottom-10 right-10' >
                 <UserButton/>
               </div>
@@ -228,11 +265,17 @@ const InterviewPage = () => {
         </div>
 
         <div>
-             <div className=' h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col  items-center justify-start relative overflow-y-auto' >
-            <h2 className="font-bold mb-4">Live Transcript</h2>
-            <div className="text-sm text-gray-700 p-2">
-              {transcript || 'Start speaking to see transcription...'}
-            </div>
+             <div className='h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col items-center justify-start relative overflow-y-auto'>
+              <h2 className="font-bold mb-4">Live Transcript</h2>
+              {transcriptionError && (
+                <div className="text-red-500 text-xs mb-2 p-2 bg-red-50 rounded">
+                  {transcriptionError}
+                </div>
+              )}
+              <div className="text-sm text-gray-700 p-2 w-full">
+                {transcript || 'Start speaking to see transcription...'}
+                {isTranscribing && <span className="animate-pulse ml-2">●</span>}
+              </div>
             </div>
             <h2 className='mt-4 text-gray-600 text-sm'>At the end of your interview, you will receive feedback from the interviewer.</h2>
         </div>
