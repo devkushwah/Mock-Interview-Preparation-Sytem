@@ -123,67 +123,91 @@ const InterviewPage = () => {
     try {
       // Initialize RecordRTC for audio recording
       if (typeof window !== "undefined" && typeof navigator !== "undefined") {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then((stream) => {
-            console.log('🎙️ Microphone stream obtained:', stream.getAudioTracks())
+        navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        })
+        .then((stream) => {
+          console.log('🎙️ Microphone stream obtained:', stream.getAudioTracks())
 
-            recorder.current = new window.RecordRTC(stream, {
-              type: 'audio',
-              mimeType: 'audio/webm;codecs=pcm',
-              recorderType: window.RecordRTC.StereoAudioRecorder,
-              timeSlice: 250,
-              desiredSampRate: 16000,
-              numberOfAudioChannels: 1,
-              bufferSize: 4096,
-              audioBitsPerSecond: 128000,
-              ondataavailable: async (blob) => {
-                console.log('🎤 Audio chunk received:', blob.size, 'bytes')
+          recorder.current = new window.RecordRTC(stream, {
+            type: 'audio',
+            mimeType: 'audio/wav', // WAV better than WebM for speech
+            recorderType: window.RecordRTC.StereoAudioRecorder,
+            timeSlice: 1000, // Longer chunks for better accuracy
+            desiredSampRate: 16000,
+            numberOfAudioChannels: 1,
+            bufferSize: 4096,
+            audioBitsPerSecond: 128000,
+            ondataavailable: async (blob) => {
+              console.log('🎤 Audio chunk received:', blob.size, 'bytes')
+              
+              // Skip very small chunks
+              if (blob.size < 1000) {
+                console.log('⏭️ Skipping small audio chunk')
+                return
+              }
+              
+              if (silenceTimeout.current) {
+                clearTimeout(silenceTimeout.current)
+              }
+
+              try {
+                setIsTranscribing(true)
+                console.log('📤 Sending to Deepgram API...')
                 
-                if (silenceTimeout.current) {
-                  clearTimeout(silenceTimeout.current)
-                }
+                const resp = await fetch('/api/deepgram/transcribe', {
+                  method: 'POST',
+                  headers: { Accept: 'application/json' },
+                  body: blob
+                })
 
-                try {
-                  setIsTranscribing(true)
-                  console.log('📤 Sending to Deepgram API...')
+                console.log('📡 Deepgram response status:', resp.status)
+                const json = await resp.json()
+                console.log('📝 Deepgram response:', json)
+                
+                if (json.transcript && json.transcript.trim()) {
+                  console.log('✅ Transcript received:', json.transcript, 'Confidence:', json.confidence)
                   
-                  const resp = await fetch('/api/deepgram/transcribe', {
-                    method: 'POST',
-                    headers: { Accept: 'application/json' },
-                    body: blob
-                  })
-
-                  console.log('📡 Deepgram response status:', resp.status)
-                  const json = await resp.json()
-                  console.log('📝 Deepgram response:', json)
-                  
-                  if (json.transcript && json.transcript.trim()) {
-                    console.log('✅ Transcript received:', json.transcript)
-                    setTranscript(prev => (prev ? prev + ' ' + json.transcript : json.transcript))
-                  } else if (json.error) {
-                    console.error('❌ Deepgram error:', json.error)
-                    setTranscriptionError('Transcription error: ' + json.error)
+                  // Only add high confidence transcripts
+                  if (json.confidence > 0.7) {
+                    setTranscript(prev => {
+                      const newTranscript = prev ? prev + ' ' + json.transcript : json.transcript
+                      // Limit transcript length for performance
+                      return newTranscript.slice(-2000)
+                    })
+                  } else {
+                    console.log('⚠️ Low confidence transcript ignored:', json.confidence)
                   }
-                } catch (err) {
-                  console.error('🚨 Transcription request failed:', err)
-                  setTranscriptionError('Transcription request failed: ' + err.message)
-                } finally {
-                  setIsTranscribing(false)
+                } else if (json.error) {
+                  console.error('❌ Deepgram error:', json.error)
+                  setTranscriptionError('Transcription error: ' + json.error)
                 }
+              } catch (err) {
+                console.error('🚨 Transcription request failed:', err)
+                setTranscriptionError('Transcription request failed: ' + err.message)
+              } finally {
+                setIsTranscribing(false)
+              }
 
-                silenceTimeout.current = setTimeout(() => {
-                  console.log('🔇 User stopped talking')
-                }, 2000)
-              },
-            })
-            recorder.current.startRecording()
-            console.log('Recording started')
+              silenceTimeout.current = setTimeout(() => {
+                console.log('🔇 User stopped talking')
+              }, 3000) // Longer silence detection
+            },
           })
-          .catch((err) => {
-            console.error('Microphone access denied:', err)
-            setEnableMic(false)
-            setError('Microphone access denied. Please allow microphone access and try again.')
-          })
+          recorder.current.startRecording()
+          console.log('Recording started')
+        })
+        .catch((err) => {
+          console.error('Microphone access denied:', err)
+          setEnableMic(false)
+          setError('Microphone access denied. Please allow microphone access and try again.')
+        })
       }
     } catch (err) {
       console.error('Error connecting to server:', err)
@@ -267,15 +291,37 @@ const InterviewPage = () => {
         <div>
              <div className='h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col items-center justify-start relative overflow-y-auto'>
               <h2 className="font-bold mb-4">Live Transcript</h2>
+              
+              {/* Audio level indicator */}
+              {enableMic && (
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                  <div className={`bg-green-500 h-2 rounded-full transition-all duration-150 ${isTranscribing ? 'animate-pulse' : ''}`} 
+                       style={{width: '50%'}}></div>
+                </div>
+              )}
+              
               {transcriptionError && (
-                <div className="text-red-500 text-xs mb-2 p-2 bg-red-50 rounded">
+                <div className="text-red-500 text-xs mb-2 p-2 bg-red-50 rounded w-full">
                   {transcriptionError}
                 </div>
               )}
+              
               <div className="text-sm text-gray-700 p-2 w-full">
                 {transcript || 'Start speaking to see transcription...'}
-                {isTranscribing && <span className="animate-pulse ml-2">●</span>}
+                {isTranscribing && (
+                  <span className="inline-flex items-center ml-2">
+                    <span className="animate-pulse text-blue-500">●</span>
+                    <span className="text-xs text-gray-500 ml-1">Processing...</span>
+                  </span>
+                )}
               </div>
+              
+              {/* Word count */}
+              {transcript && (
+                <div className="text-xs text-gray-400 mt-2 self-end">
+                  Words: {transcript.split(' ').length}
+                </div>
+              )}
             </div>
             <h2 className='mt-4 text-gray-600 text-sm'>At the end of your interview, you will receive feedback from the interviewer.</h2>
         </div>

@@ -21,12 +21,23 @@ export async function POST(req) {
     
     console.log('📡 Sending to Deepgram...')
     const response = await fetch(
-      'https://api.deepgram.com/v1/listen?language=en-US&punctuate=true&smart_format=true',
+      'https://api.deepgram.com/v1/listen?' + new URLSearchParams({
+        language: 'en-US',
+        model: 'nova-2', // Latest and most accurate model
+        smart_format: 'true',
+        punctuate: 'true',
+        paragraphs: 'true',
+        utterances: 'true',
+        filler_words: 'false', // Remove "um", "uh" etc
+        diarize: 'false',
+        numerals: 'true', // Convert numbers to digits
+        search: '', // Add common interview terms if needed
+      }),
       {
         method: 'POST',
         headers: {
           'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/webm'
+          'Content-Type': 'audio/wav' // Match the mimeType from client
         },
         body: Buffer.from(arrayBuffer)
       }
@@ -44,11 +55,14 @@ export async function POST(req) {
     console.log('📋 Deepgram response data:', JSON.stringify(data, null, 2))
     
     const transcript = data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || ''
-    console.log('📝 Extracted transcript:', transcript)
+    const confidence = data?.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0
+    
+    console.log('📝 Extracted transcript:', transcript, 'Confidence:', confidence)
     
     return NextResponse.json({ 
       transcript,
-      confidence: data?.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0
+      confidence,
+      words: data?.results?.channels?.[0]?.alternatives?.[0]?.words || []
     })
 
   } catch (error) {
