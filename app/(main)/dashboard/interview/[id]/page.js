@@ -1,16 +1,64 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { db } from '@/lib/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
 import { Interviewer } from '@/services/options'
+import { UserButton } from '@stackframe/stack'
+import { Button } from "@/components/ui/button"
+import dynamic from 'next/dynamic'
+
+// Dynamic imports for client-side libraries
+const RecordRTC = dynamic(() => import('recordrtc'), { ssr: false })
 
 const InterviewPage = () => {
   const { id } = useParams()
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [enableMic, setEnableMic] = useState(false)
+  const [recordRTCReady, setRecordRTCReady] = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const [isConnecting, setIsConnecting] = useState(false)
+  
+  const recorder = useRef(null)
+  const silenceTimeout = useRef(null)
+
+  // Load RecordRTC when component mounts
+  useEffect(() => {
+    const loadRecordRTC = async () => {
+      try {
+        const RecordRTCModule = await import('recordrtc')
+        window.RecordRTC = RecordRTCModule.default
+        setRecordRTCReady(true)
+        console.log('RecordRTC loaded successfully')
+      } catch (err) {
+        console.error('Failed to load RecordRTC:', err)
+        setError('Failed to load audio recording library')
+      }
+    }
+    
+    if (typeof window !== 'undefined') {
+      loadRecordRTC()
+    }
+  }, [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recorder.current) {
+        recorder.current.stopRecording(() => {
+          if (recorder.current.stream) {
+            recorder.current.stream.getTracks().forEach(track => track.stop())
+          }
+        })
+      }
+      if (silenceTimeout.current) {
+        clearTimeout(silenceTimeout.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const fetchDiscussionRoom = async () => {
@@ -61,20 +109,132 @@ const InterviewPage = () => {
     )
   }
 
+  const connectToServer = async () => {
+    if (!recordRTCReady || !window.RecordRTC) {
+      console.error('RecordRTC not ready yet')
+      return
+    }
+
+    setIsConnecting(true)
+    setEnableMic(true)
+
+    try {
+      // Initialize RecordRTC for audio recording
+      if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then((stream) => {
+            recorder.current = new window.RecordRTC(stream, {
+              type: 'audio',
+              mimeType: 'audio/webm;codecs=pcm',
+              recorderType: window.RecordRTC.StereoAudioRecorder,
+              timeSlice: 250,
+              desiredSampRate: 16000,
+              numberOfAudioChannels: 1,
+              bufferSize: 4096,
+              audioBitsPerSecond: 128000,
+              ondataavailable: async (blob) => {
+                // Reset the silence detection timer on audio input
+                if (silenceTimeout.current) {
+                  clearTimeout(silenceTimeout.current)
+                }
+
+                const buffer = await blob.arrayBuffer()
+                console.log(buffer)
+                
+                // Restart the silence detection timer
+                silenceTimeout.current = setTimeout(() => {
+                  console.log("User stopped talking")
+                  // Handle user stopped talking (e.g., send final transcript, stop recording, etc.)
+                }, 2000)
+              },
+            })
+            recorder.current.startRecording()
+            console.log('Recording started')
+          })
+          .catch((err) => {
+            console.error('Microphone access denied:', err)
+            setEnableMic(false)
+            setError('Microphone access denied. Please allow microphone access and try again.')
+          })
+      }
+    } catch (err) {
+      console.error('Error connecting to server:', err)
+      setEnableMic(false)
+      setError('Failed to connect to transcription service')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const disconnect = async (e) => {
+    e.preventDefault()
+
+    if (silenceTimeout.current) {
+      clearTimeout(silenceTimeout.current)
+      silenceTimeout.current = null
+    }
+    
+    if (recorder.current) {
+      recorder.current.stopRecording(() => {
+        let blob = recorder.current.getBlob()
+        // Do something with the recorded audio blob if needed
+        if (recorder.current.stream) {
+          recorder.current.stream.getTracks().forEach(track => track.stop())
+        }
+        recorder.current = null
+      })
+      console.log('Recording stopped')
+    }
+    
+    setEnableMic(false)
+    setTranscript('')
+  }
+
   return (
-   <div> 
+   <div className='-mt-12'>  
        <h2 className='text-lg font-bold'>{discussionRoomData?.practiceOption}</h2> 
 
-       <div className='mt-5 grid grid-cols-1 lg:grid-cols-4 gap-10'>
-        <div className='lg:cols-span-3 h-[60vh] bg-secondary border rounded-4xl p-4 flex items-center justify-between'>
-            <img
-                src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
-                alt={discussionRoomData?.interviewerName || 'Interviewer'}
-                className='h-[80px] w-[80px] rounded-full object-cover '
-            />
-        </div>
-        <div>
+        
+       <div className='mt-5 grid grid-cols-1 lg:grid-cols-3 gap-10'>
 
+        <div className='lg:col-span-2'>
+          <div className=' h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col  items-center justify-center relative' >
+              <img
+                  src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
+                  alt={discussionRoomData?.interviewerName || 'Interviewer'}
+                  className='h-[80px] w-[80px] rounded-full object-cover animate-pulse'
+              />
+              <h2 className="text-gray-800">{discussionRoomData?.interviewerName}</h2>
+              <div className='p-5 bg-gray-200 px-10 rounded-lg absolute bottom-10 right-10' >
+                <UserButton/>
+              </div>
+          </div>
+
+            <div className="mt-5 flex items-center justify-center" >
+              {enableMic ? 
+                <Button variant="destructive" onClick={disconnect} disabled={isConnecting}>
+                  Disconnect
+                </Button>
+                :
+                <Button 
+                  onClick={connectToServer} 
+                  disabled={!recordRTCReady || isConnecting}
+                  className="bg-blue-500 hover:bg-blue-600 text-white"
+                >
+                  {isConnecting ? 'Connecting...' : recordRTCReady ? 'Connect' : 'Loading...'}
+                </Button>
+              }
+            </div>
+        </div>
+
+        <div>
+             <div className=' h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col  items-center justify-start relative overflow-y-auto' >
+            <h2 className="font-bold mb-4">Live Transcript</h2>
+            <div className="text-sm text-gray-700 p-2">
+              {transcript || 'Start speaking to see transcription...'}
+            </div>
+            </div>
+            <h2 className='mt-4 text-gray-600 text-sm'>At the end of your interview, you will receive feedback from the interviewer.</h2>
         </div>
        </div>
    </div>
