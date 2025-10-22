@@ -66,6 +66,16 @@ const InterviewPage = () => {
     await connect(discussionRoomData)
   }
 
+  useEffect(() => {
+    if (aiResponse && !isAiProcessing) {
+      // Auto-scroll to bottom when new AI response is received
+      const conversationContainer = document.getElementById('conversation-container')
+      if (conversationContainer) {
+        conversationContainer.scrollTop = conversationContainer.scrollHeight
+      }
+    }
+  }, [aiResponse, isAiProcessing])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -94,25 +104,29 @@ const InterviewPage = () => {
               <img
                   src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
                   alt={discussionRoomData?.interviewerName || 'Interviewer'}
-                  className={`h-[80px] w-[80px] rounded-full object-cover ${isAiProcessing ? 'animate-pulse' : ''}`}
+                  className={`h-[80px] w-[80px] rounded-full object-cover ${isAiProcessing ? 'animate-pulse border-4 border-blue-400' : ''}`}
               />
               <h2 className="text-gray-800 mb-2">{discussionRoomData?.interviewerName}</h2>
               
-              {/* AI Response Display */}
-              {aiResponse && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md text-center mt-4">
-                  <div className="text-sm text-blue-800 font-medium mb-1">AI Interviewer:</div>
-                  <div className="text-sm text-gray-700">{aiResponse}</div>
+              {/* Streaming TTS Indicator */}
+              {isAiProcessing && (
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4 max-w-md text-center mt-4">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                  <div className="text-sm text-blue-700 font-medium">🎙️ Streaming Response...</div>
+                  <div className="text-xs text-gray-600 mt-1">AI is speaking via Deepgram TTS</div>
                 </div>
               )}
 
-              {/* AI Processing Indicator */}
-              {isAiProcessing && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 max-w-md text-center mt-4">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-sm text-yellow-700">AI is thinking...</span>
-                  </div>
+              {/* AI Response Display */}
+              {aiResponse && !isAiProcessing && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md text-center mt-4">
+                  <div className="text-sm text-green-800 font-medium mb-1">AI Interviewer:</div>
+                  <div className="text-sm text-gray-700">{aiResponse}</div>
+                  <div className="text-xs text-green-600 mt-2">✅ Audio played</div>
                 </div>
               )}
               
@@ -120,14 +134,14 @@ const InterviewPage = () => {
               {isConnected && (
                 <div className="absolute top-4 left-4 flex items-center gap-2">
                   <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-green-600">Live Connected</span>
+                  <span className="text-sm text-green-600">🔊 Live Audio Streaming</span>
                 </div>
               )}
               
               {isConnecting && (
                 <div className="absolute top-4 left-4 flex items-center gap-2">
                   <div className="w-3 h-3 bg-yellow-500 rounded-full animate-spin"></div>
-                  <span className="text-sm text-yellow-600">Connecting...</span>
+                  <span className="text-sm text-yellow-600">Connecting TTS...</span>
                 </div>
               )}
               
@@ -145,7 +159,7 @@ const InterviewPage = () => {
             <div className="mt-5 flex items-center justify-center gap-4">
               {isConnected ? 
                 <Button variant="destructive" onClick={disconnect}>
-                  End Interview
+                  End Streaming Interview
                 </Button>
                 :
                 <Button 
@@ -153,7 +167,7 @@ const InterviewPage = () => {
                   disabled={isConnecting}
                   className="bg-blue-500 hover:bg-blue-600 text-white"
                 >
-                  {isConnecting ? 'Connecting...' : 'Start AI Interview'}
+                  {isConnecting ? 'Connecting TTS...' : 'Start Streaming AI Interview'}
                 </Button>
               }
               
@@ -167,7 +181,7 @@ const InterviewPage = () => {
 
         <div>
              <div className='h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col relative overflow-hidden'>
-              <h2 className="font-bold mb-4 text-center">Interview Session</h2>
+              <h2 className="font-bold mb-4 text-center">🎵 Streaming Interview Session</h2>
               
               {/* Current Speech Display */}
               {(transcript || interimTranscript) && (
@@ -186,10 +200,10 @@ const InterviewPage = () => {
               )}
               
               {/* Conversation History */}
-              <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+              <div className="flex-1 overflow-y-auto space-y-3 mb-4" id="conversation-container">
                 {conversationHistory.length === 0 && !isConnected && (
                   <div className="text-center text-gray-500 text-sm mt-8">
-                    Click "Start AI Interview" to begin your practice session
+                    🎙️ Click "Start Streaming AI Interview" to begin real-time voice conversation with TTS
                   </div>
                 )}
                 
@@ -197,10 +211,13 @@ const InterviewPage = () => {
                   <div key={index} className={`p-3 rounded-lg ${
                     message.role === 'user' 
                       ? 'bg-blue-50 border-l-4 border-blue-400 ml-4' 
-                      : 'bg-gray-50 border-l-4 border-gray-400 mr-4'
+                      : 'bg-green-50 border-l-4 border-green-400 mr-4'
                   }`}>
-                    <div className="text-xs font-medium text-gray-500 mb-1">
-                      {message.role === 'user' ? 'You:' : 'AI Interviewer:'}
+                    <div className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
+                      {message.role === 'user' ? '👤 You:' : '🤖 AI Interviewer:'}
+                      {message.role === 'assistant' && (
+                        <span className="text-green-600">🔊</span>
+                      )}
                     </div>
                     <div className="text-sm text-gray-700">{message.content}</div>
                   </div>
@@ -210,26 +227,32 @@ const InterviewPage = () => {
               {/* Live Status */}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center text-xs text-gray-400 mb-2">
-                  <span>{isConnected ? '🟢 Live' : '🔴 Offline'}</span>
+                  <span className="flex items-center gap-1">
+                    {isConnected ? '🟢 Streaming TTS' : '🔴 Offline'} 
+                    {isAiProcessing && <span className="text-blue-600">🎵 Playing</span>}
+                  </span>
                   <span>Messages: {conversationHistory.length}</span>
                 </div>
                 
                 {isConnected && (
                   <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
-                    <div className="bg-green-500 h-1 rounded-full transition-all duration-150 animate-pulse" 
-                         style={{width: '70%'}}></div>
+                    <div className="bg-gradient-to-r from-green-500 to-blue-500 h-1 rounded-full transition-all duration-150 animate-pulse" 
+                         style={{width: isAiProcessing ? '100%' : '70%'}}></div>
                   </div>
                 )}
                 
                 <div className="text-xs text-gray-600 p-2 bg-gray-50 rounded">
                   {!isConnected && !isConnecting && (
-                    <span className="text-gray-400">Ready to start interview...</span>
+                    <span className="text-gray-400">Ready for streaming TTS interview...</span>
                   )}
                   {isConnecting && (
-                    <span className="text-yellow-600">Connecting to AI interviewer...</span>
+                    <span className="text-yellow-600">🔌 Connecting to streaming TTS...</span>
                   )}
-                  {isConnected && (
-                    <span className="text-green-600">🎤 Listening... Start speaking!</span>
+                  {isConnected && !isAiProcessing && (
+                    <span className="text-green-600">🎤 Listening... Speak to hear AI response!</span>
+                  )}
+                  {isConnected && isAiProcessing && (
+                    <span className="text-blue-600">🎵 AI responding with streaming audio...</span>
                   )}
                 </div>
               </div>
@@ -237,10 +260,10 @@ const InterviewPage = () => {
             
             <div className='mt-4 text-gray-600 text-sm'>
               <p className="mb-2">
-                🤖 <strong>AI-Powered Interview:</strong> Real-time conversation with AI interviewer
+                🎵 <strong>Streaming TTS Interview:</strong> Real-time voice conversation with instant audio responses
               </p>
               <p className="text-xs">
-                Powered by Deepgram Nova-3 transcription and AI responses
+                Powered by Deepgram Nova-3 transcription + Aura-2 streaming TTS
               </p>
             </div>
         </div>
