@@ -19,10 +19,11 @@ export const useWebSocketTranscription = () => {
   const audioContextRef = useRef(null)
   const audioChunksRef = useRef([])
   
-  // Speech detection control refs
+  // Speech detection control refs with better accumulation
   const speechTimeoutRef = useRef(null)
-  const lastFinalTranscriptRef = useRef('')
-  const silenceTimeoutRef = useRef(null)
+  const accumulatedTranscriptRef = useRef('') // Store complete accumulated transcript
+  const lastProcessedTranscriptRef = useRef('')
+  const lastSpeechTimeRef = useRef(Date.now())
 
   // Initialize TTS WebSocket connection
   const initializeTTSConnection = useCallback(() => {
@@ -134,8 +135,8 @@ export const useWebSocketTranscription = () => {
     }
   }, [])
 
-  // Generate AI response with proper speech completion detection
-  const generateAIResponse = useCallback(async (userInput, discussionRoomData) => {
+  // Generate AI response with complete accumulated transcript
+  const generateAIResponse = useCallback(async (completeTranscript, discussionRoomData) => {
     try {
       // Prevent multiple concurrent AI calls
       if (isAiProcessing) {
@@ -144,7 +145,7 @@ export const useWebSocketTranscription = () => {
       }
 
       // Check if input is meaningful (not just partial speech)
-      if (!userInput || userInput.trim().length < 5) {
+      if (!completeTranscript || completeTranscript.trim().length < 5) {
         console.log('🚫 Input too short, waiting for more...')
         return
       }
@@ -152,7 +153,7 @@ export const useWebSocketTranscription = () => {
       setIsAiProcessing(true)
       setAiResponse('')
 
-      console.log('🎤 Processing complete user input:', userInput)
+      console.log('🎤 Processing complete accumulated transcript:', completeTranscript)
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -160,7 +161,7 @@ export const useWebSocketTranscription = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: userInput,
+          message: completeTranscript,
           context: {
             topic: discussionRoomData?.topic,
             practiceOption: discussionRoomData?.practiceOption,
@@ -179,12 +180,16 @@ export const useWebSocketTranscription = () => {
       setAiResponse(aiMessage)
       
       // Add messages to conversation
-      const userMessage = { role: 'user', content: userInput }
+      const userMessage = { role: 'user', content: completeTranscript }
       const assistantMessage = { role: 'assistant', content: aiMessage }
       setConversationHistory(prev => [...prev, userMessage, assistantMessage])
 
       // Send AI response to TTS for streaming audio
       sendTextToTTS(aiMessage)
+
+      // Clear accumulated transcript after processing
+      accumulatedTranscriptRef.current = ''
+      lastProcessedTranscriptRef.current = completeTranscript
 
     } catch (error) {
       console.error('Error generating AI response:', error)
@@ -193,27 +198,48 @@ export const useWebSocketTranscription = () => {
     }
   }, [sendTextToTTS, isAiProcessing])
 
-  // Handle speech completion with improved timing
+  // Improved speech completion handling with transcript accumulation
   const handleSpeechComplete = useCallback((finalTranscript, discussionRoomData) => {
     // Clear any existing timeout
     if (speechTimeoutRef.current) {
       clearTimeout(speechTimeoutRef.current)
     }
 
-    // Avoid processing the same transcript multiple times
-    if (finalTranscript === lastFinalTranscriptRef.current) {
-      console.log('🔄 Duplicate transcript, skipping...')
-      return
+    // Accumulate the new transcript part
+    if (finalTranscript && finalTranscript.trim()) {
+      // Add space if there's already accumulated text
+      const separator = accumulatedTranscriptRef.current ? ' ' : ''
+      accumulatedTranscriptRef.current += separator + finalTranscript.trim()
+      
+      console.log('📝 Accumulated transcript so far:', accumulatedTranscriptRef.current)
     }
 
-    // Wait for a short silence to ensure speech is truly complete
+    // Update last speech time
+    lastSpeechTimeRef.current = Date.now()
+
+    console.log('⏱️ User paused, waiting 4 seconds for more input...')
+
+    // Wait 4 seconds after final transcript to ensure user is done speaking
     speechTimeoutRef.current = setTimeout(() => {
-      if (finalTranscript.trim() && finalTranscript !== lastFinalTranscriptRef.current) {
-        console.log('✅ Speech completed, processing:', finalTranscript)
-        lastFinalTranscriptRef.current = finalTranscript
-        generateAIResponse(finalTranscript, discussionRoomData)
+      // Double check that no new speech has started in the meantime
+      const timeSinceLastSpeech = Date.now() - lastSpeechTimeRef.current
+      
+      if (timeSinceLastSpeech >= 4000 && accumulatedTranscriptRef.current.trim()) {
+        const completeTranscript = accumulatedTranscriptRef.current.trim()
+        
+        // Only process if we have new content
+        if (completeTranscript !== lastProcessedTranscriptRef.current) {
+          console.log('✅ 4 seconds passed, processing complete transcript:', completeTranscript)
+          generateAIResponse(completeTranscript, discussionRoomData)
+        } else {
+          console.log('🔄 Same transcript already processed, skipping...')
+        }
+      } else if (timeSinceLastSpeech < 4000) {
+        console.log('🔄 User still speaking, extending wait time...')
+        // If user spoke again within the timeout, restart the timer
+        handleSpeechComplete('', discussionRoomData) // Empty string since we already accumulated
       }
-    }, 800) // Wait 800ms after final transcript before processing
+    }, 4000)
 
   }, [generateAIResponse])
 
@@ -228,8 +254,8 @@ export const useWebSocketTranscription = () => {
       // Get user media for speech recognition
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 
-      // Initialize Deepgram WebSocket for speech recognition with better settings
-      const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=500&utterance_end_ms=1500&vad_events=true`
+      // Initialize Deepgram WebSocket with better settings for continuous speech
+      const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1500&vad_events=true&punctuate=true`
       
       wsRef.current = new WebSocket(wsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
 
@@ -259,25 +285,27 @@ export const useWebSocketTranscription = () => {
           const transcript = data.channel.alternatives[0].transcript
           
           if (data.is_final && transcript.trim()) {
-            console.log('📝 Final transcript received:', transcript)
-            setTranscript(transcript)
+            console.log('📝 Final transcript chunk received:', transcript)
+            setTranscript(accumulatedTranscriptRef.current + ' ' + transcript) // Show accumulated + new
             setInterimTranscript('')
             
-            // Handle speech completion with improved timing
+            // Update last speech time whenever we get final transcript
+            lastSpeechTimeRef.current = Date.now()
+            
+            // Handle speech completion with accumulation
             handleSpeechComplete(transcript, discussionRoomData)
             
           } else if (transcript) {
-            // Show interim results but don't process them
+            // Show interim results but don't accumulate them
+            lastSpeechTimeRef.current = Date.now()
             setInterimTranscript(transcript)
           }
         }
 
         // Handle voice activity detection events
         if (data.type === 'UtteranceEnd') {
-          console.log('🔇 Utterance ended - user stopped speaking')
-          if (silenceTimeoutRef.current) {
-            clearTimeout(silenceTimeoutRef.current)
-          }
+          console.log('🔇 Utterance ended - user paused speaking')
+          // Don't immediately process, let the timeout handle it
         }
       }
 
@@ -304,9 +332,6 @@ export const useWebSocketTranscription = () => {
     // Clear all timeouts
     if (speechTimeoutRef.current) {
       clearTimeout(speechTimeoutRef.current)
-    }
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current)
     }
 
     // Close speech recognition WebSocket
@@ -338,7 +363,9 @@ export const useWebSocketTranscription = () => {
     setTranscript('')
     setInterimTranscript('')
     setAiResponse('')
-    lastFinalTranscriptRef.current = ''
+    accumulatedTranscriptRef.current = ''
+    lastProcessedTranscriptRef.current = ''
+    lastSpeechTimeRef.current = Date.now()
   }, [])
 
   const clearTranscript = useCallback(() => {
@@ -347,7 +374,9 @@ export const useWebSocketTranscription = () => {
     setAiResponse('')
     setConversationHistory([])
     audioChunksRef.current = []
-    lastFinalTranscriptRef.current = ''
+    accumulatedTranscriptRef.current = ''
+    lastProcessedTranscriptRef.current = ''
+    lastSpeechTimeRef.current = Date.now()
   }, [])
 
   return {
