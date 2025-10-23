@@ -1,25 +1,17 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebaseConfig'
-import { collection, addDoc } from 'firebase/firestore'
+import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
 import { AIModel } from '@/services/GlobalServices'
 
-// Create saveChatMessage function directly in route if service missing
-const saveChatMessage = async (discussionRoomId, message, sender, timestamp) => {
-  try {
-    const chatRef = collection(db, 'chats')
-    await addDoc(chatRef, {
-      discussionRoomId,
-      message,
-      sender,
-      timestamp,
-      createdAt: new Date()
-    })
-    console.log('💾 Chat message saved to Firebase')
-    return true
-  } catch (error) {
-    console.error('❌ Error saving chat to Firebase:', error)
-    return false
-  }
+// Save message to discussion room
+const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {
+  const roomRef = doc(db, 'discussionRooms', discussionRoomId)
+  const timestamp = Date.now()
+  const messageObj = { sender, message, timestamp }
+  await updateDoc(roomRef, {
+    conversation: arrayUnion(messageObj),
+    updatedAt: serverTimestamp()
+  })
 }
 
 export async function POST(request) {
@@ -44,11 +36,10 @@ export async function POST(request) {
     console.log('🤖 Processing message:', message.substring(0, 50) + '...')
     
     // Save user message
-    const timestamp = Date.now()
     if (discussionRoomId) {
       try {
-        await saveChatMessage(discussionRoomId, message, 'user', timestamp)
-        console.log('✅ User message saved')
+        await saveMessageToDiscussionRoom(discussionRoomId, 'user', message)
+        console.log('✅ User message saved to discussionRoom conversation array')
       } catch (error) {
         console.error('❌ Failed to save user message:', error)
       }
@@ -103,8 +94,8 @@ Respond naturally as an interviewer speaking out loud:`
       // Save AI response
       if (discussionRoomId) {
         try {
-          await saveChatMessage(discussionRoomId, aiResponse, 'ai', timestamp + 1)
-          console.log('✅ AI response saved')
+          await saveMessageToDiscussionRoom(discussionRoomId, 'ai', aiResponse)
+          console.log('✅ AI message saved to discussionRoom conversation array')
         } catch (error) {
           console.error('❌ Failed to save AI response:', error)
         }

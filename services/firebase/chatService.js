@@ -1,48 +1,35 @@
 import { db } from '@/lib/firebaseConfig'
-import { collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore'
+import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
 
-export const saveChatMessage = async (discussionRoomId, message, sender, timestamp) => {
-  try {
-    console.log('💾 Attempting to save chat message:', { discussionRoomId, sender, message: message.substring(0, 50) })
-    
-    const chatRef = collection(db, 'chats')
-    const docRef = await addDoc(chatRef, {
-      discussionRoomId,
-      message,
-      sender, // 'user' or 'ai'
-      timestamp,
-      createdAt: new Date()
-    })
-    
-    console.log('✅ Chat message saved to Firebase with ID:', docRef.id)
-    return docRef.id
-  } catch (error) {
-    console.error('❌ Error saving chat to Firebase:', error)
-    throw error
-  }
+/**
+ * Save a chat message to the discussionRoom's conversations array.
+ * - Appends message using arrayUnion.
+ * - Updates updatedAt.
+ */
+export async function saveMessageToDiscussionRoom(discussionRoomId, sender, message) {
+  const roomRef = doc(db, 'discussionRooms', discussionRoomId)
+  const timestamp = Date.now()
+  const messageObj = { sender, message, timestamp }
+
+  // Only update (never create new doc here)
+  await updateDoc(roomRef, {
+    conversations: arrayUnion(messageObj),
+    updatedAt: serverTimestamp()
+  })
 }
 
-export const getChatHistory = async (discussionRoomId) => {
-  try {
-    console.log('📖 Fetching chat history for room:', discussionRoomId)
-    
-    const chatRef = collection(db, 'chats')
-    const q = query(
-      chatRef, 
-      where('discussionRoomId', '==', discussionRoomId),
-      orderBy('timestamp', 'asc')
-    )
-    const querySnapshot = await getDocs(q)
-    
-    const chatHistory = []
-    querySnapshot.forEach((doc) => {
-      chatHistory.push({ id: doc.id, ...doc.data() })
-    })
-    
-    console.log('📖 Retrieved chat history:', chatHistory.length, 'messages')
-    return chatHistory
-  } catch (error) {
-    console.error('❌ Error fetching chat history:', error)
-    return []
+/**
+ * Get all chat messages for a discussionRoom.
+ * Returns the conversations array (ordered by timestamp).
+ */
+export async function getConversationHistory(discussionRoomId) {
+  const roomRef = doc(db, 'discussionRooms', discussionRoomId)
+  const snap = await getDoc(roomRef)
+  if (snap.exists()) {
+    const data = snap.data()
+    return Array.isArray(data.conversation)
+      ? [...data.conversation].sort((a, b) => a.timestamp - b.timestamp)
+      : []
   }
+  return []
 }

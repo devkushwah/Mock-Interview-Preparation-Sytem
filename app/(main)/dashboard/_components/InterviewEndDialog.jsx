@@ -29,14 +29,10 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
             <p>Loading chat history...</p>
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto">
-              {chatHistory.map((chat) => (
-                <div key={chat.id} className={`p-2 rounded ${
-                  chat.sender === 'user' ? 'bg-blue-100 ml-4' : 'bg-gray-100 mr-4'
-                }`}>
-                  <span className="font-medium">
-                    {chat.sender === 'user' ? '👤 You:' : '🤖 AI Interviewer:'}
-                  </span>
-                  <p className="text-sm">{chat.message}</p>
+              {chatHistory.map(chat => (
+                <div key={chat.id} className={chat.sender === 'user' ? 'bg-blue-100' : 'bg-gray-100'}>
+                  <strong>{chat.sender === 'user' ? '👤 You:' : '🤖 AI:'}</strong>
+                  <span>{chat.message}</span>
                 </div>
               ))}
             </div>
