@@ -139,21 +139,24 @@ export const useWebSocketTranscription = () => {
   const generateAIResponse = useCallback(async (completeTranscript, discussionRoomData) => {
     try {
       // Prevent multiple concurrent AI calls
-      if (isAiProcessing) {
-        console.log('🚫 AI already processing, skipping...')
-        return
-      }
+      if (isAiProcessing) return
 
       // Check if input is meaningful (not just partial speech)
-      if (!completeTranscript || completeTranscript.trim().length < 5) {
-        console.log('🚫 Input too short, waiting for more...')
-        return
-      }
+      if (!completeTranscript || completeTranscript.trim().length < 5) return
 
       setIsAiProcessing(true)
       setAiResponse('')
 
       console.log('🎤 Processing complete accumulated transcript:', completeTranscript)
+      console.log('📤 Sending to chat API:', {
+        message: completeTranscript,
+        context: {
+          topic: discussionRoomData?.topic,
+          practiceOption: discussionRoomData?.practiceOption,
+          interviewerName: discussionRoomData?.interviewerName,
+        },
+        discussionRoomId: discussionRoomData?.id
+      })
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -167,12 +170,11 @@ export const useWebSocketTranscription = () => {
             practiceOption: discussionRoomData?.practiceOption,
             interviewerName: discussionRoomData?.interviewerName,
           },
+          discussionRoomId: discussionRoomData?.id // <-- ADD THIS LINE
         }),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to get AI response')
-      }
+      if (!response.ok) return
 
       const data = await response.json()
       const aiMessage = data.response
@@ -378,6 +380,51 @@ export const useWebSocketTranscription = () => {
     lastProcessedTranscriptRef.current = ''
     lastSpeechTimeRef.current = Date.now()
   }, [])
+
+  // New function to process transcript and send to AI
+  const processTranscript = async (finalTranscript) => {
+    try {
+      console.log('📤 About to send message to chat API:', { 
+        message: finalTranscript,
+        discussionRoomId: discussionRoomData?.id,
+        hasContext: !!interviewContext 
+      })
+      
+      // Add this debug check
+      if (!discussionRoomData?.id) {
+        console.error('❌ discussionRoomId missing!', discussionRoomData)
+        return
+      }
+      
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: finalTranscript,
+          context: interviewContext,
+          discussionRoomId: discussionRoomData.id // Make sure this is included
+        })
+      })
+      
+      console.log('📤 Chat API response status:', response.status)
+      
+      if (!response.ok) {
+        console.error('❌ Chat API response not ok:', response.status, response.statusText)
+        return
+      }
+      
+      const data = await response.json()
+      console.log('✅ Received AI response:', data)
+      
+      if (data.response) {
+        // TTS and other processing...
+        console.log('✅ Processing AI response for TTS:', data.response.substring(0, 50) + '...')
+      }
+      
+    } catch (error) {
+      console.error('❌ Error in processTranscript:', error)
+    }
+  }
 
   return {
     transcript,

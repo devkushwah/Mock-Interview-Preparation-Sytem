@@ -15,6 +15,20 @@ const InterviewPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   
+  // Create interview context from discussion room data
+  const interviewContext = discussionRoomData ? {
+    topic: discussionRoomData.topic,
+    difficulty: discussionRoomData.difficulty,
+    practiceOption: discussionRoomData.practiceOption,
+    interviewerName: discussionRoomData.interviewerName
+  } : null
+
+  // Handle transcript ready callback
+  const handleTranscriptReady = (transcript) => {
+    console.log('📝 Transcript ready:', transcript)
+    // Additional processing if needed
+  }
+  
   const {
     transcript,
     interimTranscript,
@@ -27,7 +41,11 @@ const InterviewPage = () => {
     connect,
     disconnect,
     clearTranscript
-  } = useWebSocketTranscription()
+  } = useWebSocketTranscription(
+    interviewContext,
+    discussionRoomData,
+    handleTranscriptReady
+  )
 
   useEffect(() => {
     const fetchDiscussionRoom = async () => {
@@ -63,7 +81,9 @@ const InterviewPage = () => {
   }
 
   const handleConnect = async () => {
-    await connect(discussionRoomData)
+    if (discussionRoomData) {
+      await connect(discussionRoomData)
+    }
   }
 
   useEffect(() => {
@@ -164,7 +184,7 @@ const InterviewPage = () => {
                 :
                 <Button 
                   onClick={handleConnect} 
-                  disabled={isConnecting}
+                  disabled={isConnecting || !discussionRoomData}
                   className="bg-blue-500 hover:bg-blue-600 text-white"
                 >
                   {isConnecting ? 'Connecting TTS...' : 'Start Streaming AI Interview'}

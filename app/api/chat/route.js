@@ -1,25 +1,65 @@
 import { NextResponse } from 'next/server'
+import { db } from '@/lib/firebaseConfig'
+import { collection, addDoc } from 'firebase/firestore'
 import { AIModel } from '@/services/GlobalServices'
 
-export async function POST(request) {
+// Create saveChatMessage function directly in route if service missing
+const saveChatMessage = async (discussionRoomId, message, sender, timestamp) => {
   try {
-    const { message, context } = await request.json()
+    const chatRef = collection(db, 'chats')
+    await addDoc(chatRef, {
+      discussionRoomId,
+      message,
+      sender,
+      timestamp,
+      createdAt: new Date()
+    })
+    console.log('💾 Chat message saved to Firebase')
+    return true
+  } catch (error) {
+    console.error('❌ Error saving chat to Firebase:', error)
+    return false
+  }
+}
+
+export async function POST(request) {
+  console.log('🤖 Chat API route hit!')
+  
+  try {
+    const body = await request.json()
+    console.log('🤖 Chat API request body:', {
+      hasMessage: !!body.message,
+      hasContext: !!body.context,
+      hasDiscussionRoomId: !!body.discussionRoomId,
+      discussionRoomId: body.discussionRoomId
+    })
+    
+    const { message, context, discussionRoomId } = body
     
     if (!message) {
-      return NextResponse.json(
-        { error: 'Message is required' },
-        { status: 400 }
-      )
+      console.error('❌ No message provided')
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
 
-    console.log('🤖 Chat API: Processing message:', message.substring(0, 50) + '...')
-    console.log('📋 Context:', context)
+    console.log('🤖 Processing message:', message.substring(0, 50) + '...')
+    
+    // Save user message
+    const timestamp = Date.now()
+    if (discussionRoomId) {
+      try {
+        await saveChatMessage(discussionRoomId, message, 'user', timestamp)
+        console.log('✅ User message saved')
+      } catch (error) {
+        console.error('❌ Failed to save user message:', error)
+      }
+    } else {
+      console.warn('⚠️ No discussionRoomId - skipping save')
+    }
 
-    // Create conversational interview prompt using your existing patterns
+    // Generate AI response
     const interviewerName = context?.interviewerName || 'an experienced interviewer'
     const practiceOption = context?.practiceOption || 'Mock Interview'
     
-    // Build conversation context
     const conversationPrompt = `You are ${interviewerName} conducting a ${practiceOption} session.
 
 CRITICAL VOICE CONVERSATION RULES:
@@ -39,7 +79,7 @@ Candidate just said: "${message}"
 
 Respond naturally as an interviewer speaking out loud:`
 
-    // Use your existing AIModel function with conversational prompt
+    console.log('🤖 Calling AIModel...', typeof AIModel)
     const result = await AIModel(
       context?.topic || 'general interview conversation',
       practiceOption,
@@ -47,10 +87,9 @@ Respond naturally as an interviewer speaking out loud:`
     )
     
     if (result.success) {
-      // Clean up any formatting that might slip through
       let aiResponse = result.response.trim()
       
-      // Remove any markdown formatting for voice
+      // Clean formatting
       aiResponse = aiResponse
         .replace(/###\s*/g, '')
         .replace(/\*\*/g, '')
@@ -59,24 +98,26 @@ Respond naturally as an interviewer speaking out loud:`
         .replace(/\n+/g, ' ')
         .trim()
       
-      console.log('✅ AI response generated successfully:', aiResponse.substring(0, 100) + '...')
+      console.log('✅ AI response generated:', aiResponse.substring(0, 100) + '...')
       
-      return NextResponse.json({ 
-        response: aiResponse 
-      })
+      // Save AI response
+      if (discussionRoomId) {
+        try {
+          await saveChatMessage(discussionRoomId, aiResponse, 'ai', timestamp + 1)
+          console.log('✅ AI response saved')
+        } catch (error) {
+          console.error('❌ Failed to save AI response:', error)
+        }
+      }
+      
+      return NextResponse.json({ response: aiResponse })
     } else {
       console.error('❌ AI response failed:', result.error)
-      return NextResponse.json(
-        { error: result.error || 'Failed to generate response' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: result.error || 'Failed to generate response' }, { status: 500 })
     }
     
   } catch (error) {
     console.error('❌ Chat API Error:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate response. Please try again.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate response. Please try again.' }, { status: 500 })
   }
 }
