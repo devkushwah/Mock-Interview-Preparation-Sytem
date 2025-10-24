@@ -9,7 +9,7 @@ import { UserButton } from '@stackframe/stack'
 import { Button } from "@/components/ui/button"
 import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
 import InterviewEndDialog from '../../_components/InterviewEndDialog'
-import { completeDiscussion } from '@/services/firebase/discussionService'
+import { completeDiscussion, generateAndSaveFullFeedback } from '@/services/firebase/discussionService'
 
 const InterviewPage = () => {
   const { id } = useParams()
@@ -90,9 +90,22 @@ const InterviewPage = () => {
   }
 
   const handleEndInterview = async () => {
-    await disconnect()
-    await completeDiscussion(id)  // Yeh add karo
-    setShowEndDialog(true)
+    try {
+      await disconnect()
+      
+      // Generate feedback before completing
+      const feedbackResult = await generateAndSaveFullFeedback(id, interviewContext.practiceOption, interviewContext.topic)
+      if (!feedbackResult.success) {
+        console.error('Feedback generation failed:', feedbackResult.error)
+      }
+      
+      // Complete discussion with feedback
+      await completeDiscussion(id, { feedback: feedbackResult.feedback || null })
+      
+      setShowEndDialog(true)
+    } catch (error) {
+      console.error('Error ending interview:', error)
+    }
   }
 
   useEffect(() => {
