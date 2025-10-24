@@ -1,17 +1,33 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebaseConfig'
-import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
+import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore'
 import { AIModel } from '@/services/GlobalServices'
 
-// Save message to discussion room
+// Save message to subcollection: /discussionRooms/{roomId}/messages
 const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {
+  const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
+  const messageObj = { sender, message, timestamp: Date.now() }
+  await addDoc(messagesRef, messageObj)
+  // Update room's updatedAt
   const roomRef = doc(db, 'discussionRooms', discussionRoomId)
-  const timestamp = Date.now()
-  const messageObj = { sender, message, timestamp }
-  await updateDoc(roomRef, {
-    conversation: arrayUnion(messageObj),
-    updatedAt: serverTimestamp()
-  })
+  await updateDoc(roomRef, { updatedAt: serverTimestamp() })
+}
+
+// Basic rate limiting (in-memory, for demo; use Redis in production)
+const rateLimitMap = new Map()
+const RATE_LIMIT_WINDOW = 60000 // 1 minute
+const MAX_REQUESTS = 10 // per user per window
+
+const checkRateLimit = (userId) => {
+  const now = Date.now()
+  const userRequests = rateLimitMap.get(userId) || []
+  const recentRequests = userRequests.filter(time => now - time < RATE_LIMIT_WINDOW)
+  if (recentRequests.length >= MAX_REQUESTS) {
+    return false
+  }
+  recentRequests.push(now)
+  rateLimitMap.set(userId, recentRequests)
+  return true
 }
 
 export async function POST(request) {
@@ -26,7 +42,12 @@ export async function POST(request) {
       discussionRoomId: body.discussionRoomId
     })
     
-    const { message, context, discussionRoomId } = body
+    const { message, context, discussionRoomId, userId } = body // Assume userId from auth
+    
+    // Rate limiting
+    if (userId && !checkRateLimit(userId)) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Please wait.' }, { status: 429 })
+    }
     
     if (!message) {
       console.error('❌ No message provided')
@@ -35,11 +56,11 @@ export async function POST(request) {
 
     console.log('🤖 Processing message:', message.substring(0, 50) + '...')
     
-    // Save user message
+    // Save user message to subcollection
     if (discussionRoomId) {
       try {
         await saveMessageToDiscussionRoom(discussionRoomId, 'user', message)
-        console.log('✅ User message saved to discussionRoom conversation array')
+        console.log('✅ User message saved to subcollection')
       } catch (error) {
         console.error('❌ Failed to save user message:', error)
       }
@@ -47,7 +68,7 @@ export async function POST(request) {
       console.warn('⚠️ No discussionRoomId - skipping save')
     }
 
-    // Generate AI response
+    // Generate AI response (already server-side)
     const interviewerName = context?.interviewerName || 'an experienced interviewer'
     const practiceOption = context?.practiceOption || 'Mock Interview'
     
@@ -91,11 +112,11 @@ Respond naturally as an interviewer speaking out loud:`
       
       console.log('✅ AI response generated:', aiResponse.substring(0, 100) + '...')
       
-      // Save AI response
+      // Save AI response to subcollection
       if (discussionRoomId) {
         try {
           await saveMessageToDiscussionRoom(discussionRoomId, 'ai', aiResponse)
-          console.log('✅ AI message saved to discussionRoom conversation array')
+          console.log('✅ AI message saved to subcollection')
         } catch (error) {
           console.error('❌ Failed to save AI response:', error)
         }

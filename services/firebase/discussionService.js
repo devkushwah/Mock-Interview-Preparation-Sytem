@@ -1,177 +1,309 @@
-import React from 'react'
+// services/interviewService.js
 import { db } from '@/lib/firebaseConfig';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  getDocs, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  addDoc,
+  doc,
+  query,
+  where,
+  getDocs,
   getDoc,
-  orderBy, 
+  updateDoc,
+  orderBy,
   limit,
+  startAfter,
   arrayUnion,
-  serverTimestamp 
+  serverTimestamp,
+  increment
 } from 'firebase/firestore';
+import { ExpertsList } from '@/services/options';
+import { AIModel } from '@/services/GlobalServices';
+
+/** ---------------- Helper Functions ---------------- **/
+
+const validateDiscussionInput = (d) => {
+  if (!d) return 'discussionData required';
+  if (!d.userId) return 'userId required';
+  if (!d.topic) return 'topic required';
+  if (!d.practiceOption) return 'practiceOption required';
+  return null;
+};
+
+// Normalize Firestore Timestamps
+const normalizeDoc = (docSnap) => {
+  const data = docSnap.data ? docSnap.data() : docSnap;
+  const normalizeTs = (v) => {
+    if (!v) return null;
+    if (v.toDate) return v.toDate().toISOString();
+    return v;
+  };
+
+  return {
+    ...data,
+    createdAt: normalizeTs(data.createdAt),
+    updatedAt: normalizeTs(data.updatedAt),
+    completedAt: normalizeTs(data.completedAt),
+    pausedAt: normalizeTs(data.pausedAt),
+    resumedAt: normalizeTs(data.resumedAt),
+  };
+};
+
+// Compute duration in minutes between two timestamps
+const computeDurationMinutes = (start, end = new Date()) => {
+  try {
+    const s = start.toDate ? start.toDate() : new Date(start);
+    return Math.round((end - s) / (1000 * 60));
+  } catch (e) {
+    return 0;
+  }
+};
+
+/** ---------------- Discussion CRUD ---------------- **/
 
 export const createDiscussionRoom = async (discussionData) => {
   try {
-    console.log('Creating discussion room with data:', discussionData);
-    
+    const invalid = validateDiscussionInput(discussionData);
+    if (invalid) return { success: false, error: invalid };
+
     const newDiscussion = {
       userId: discussionData.userId,
       practiceOption: discussionData.practiceOption,
       topic: discussionData.topic,
-      interviewerName: discussionData.interviewerName,
-      conversation: [],
-      status: 'active', // active, completed, paused
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      // Additional schema fields
-      duration: 0, // in minutes
+      interviewerName: discussionData.interviewerName || null,
+      status: 'active',
+      duration: 0,
       totalQuestions: 0,
-      feedback: null,
+      feedback: [],
       score: null,
       difficulty: discussionData.difficulty || 'medium',
       tags: discussionData.tags || [],
       isCompleted: false,
-      // Voice interview specific
       audioQuality: 'good',
-      totalSpeechTime: 0, // in seconds
-      averageResponseTime: 0
+      totalSpeechTime: 0,
+      averageResponseTime: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     };
-    
-    const docRef = await addDoc(collection(db, 'discussionRooms'), newDiscussion);
-    
-    console.log('Discussion room created with ID:', docRef.id);
-    
+
+    const colRef = collection(db, 'discussionRooms');
+    const docRef = await addDoc(colRef, newDiscussion);
+    const createdDoc = await getDoc(docRef);
+
     return {
-      id: docRef.id,
-      ...newDiscussion
+      success: true,
+      data: { id: docRef.id, ...normalizeDoc(createdDoc) }
     };
   } catch (error) {
-    console.error('Error creating discussion room:', error);
-    throw error;
+    console.error('createDiscussionRoom error:', error);
+    return { success: false, error: error.message || String(error) };
   }
 };
 
-export const getUserDiscussions = async (userId, limitCount = 10) => {
+export const getUserDiscussions = async (userId, limitCount = 10, cursorId = null) => {
   try {
-    const discussionsRef = collection(db, 'discussionRooms');
-    const q = query(
-      discussionsRef, 
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(limitCount)
-    );
-    const querySnapshot = await getDocs(q);
-    
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    if (!userId) return { success: false, error: 'userId required' };
+
+    const colRef = collection(db, 'discussionRooms');
+    let q;
+
+    if (cursorId) {
+      const cursorDoc = await getDoc(doc(db, 'discussionRooms', cursorId));
+      if (!cursorDoc.exists()) return { success: false, error: 'Invalid cursorId' };
+      q = query(
+        colRef,
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc'),
+        orderBy('__name__', 'desc'), // cursor-safe compound key
+        startAfter(cursorDoc),
+        limit(limitCount)
+      );
+    } else {
+      q = query(
+        colRef,
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc'),
+        orderBy('__name__', 'desc'),
+        limit(limitCount)
+      );
+    }
+
+    const snapshot = await getDocs(q);
+    const items = snapshot.docs.map(d => ({ id: d.id, ...normalizeDoc(d) }));
+    const nextCursor = items.length ? items[items.length - 1].id : null;
+
+    return { success: true, data: { items, nextCursor } };
   } catch (error) {
-    console.error('Error getting user discussions:', error);
-    throw error;
+    console.error('getUserDiscussions error:', error);
+    return { success: false, error: error.message || String(error) };
   }
 };
 
 export const getDiscussionById = async (discussionId) => {
   try {
-    const docRef = doc(db, 'discussionRooms', discussionId);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
-    } else {
-      return null;
-    }
+    if (!discussionId) return { success: false, error: 'discussionId required' };
+    const snap = await getDoc(doc(db, 'discussionRooms', discussionId));
+    if (!snap.exists()) return { success: true, data: null };
+    return { success: true, data: { id: snap.id, ...normalizeDoc(snap) } };
   } catch (error) {
-    console.error('Error getting discussion:', error);
-    throw error;
+    console.error('getDiscussionById error:', error);
+    return { success: false, error: error.message || String(error) };
   }
 };
 
-export const updateDiscussionStatus = async (discussionId, status) => {
+/** ---------------- Messages Subcollection ---------------- **/
+
+export const addConversationMessage = async (discussionId, message) => {
   try {
-    const docRef = doc(db, 'discussionRooms', discussionId);
-    await updateDoc(docRef, {
-      status: status,
+    if (!discussionId) return { success: false, error: 'discussionId required' };
+    if (!message || !message.text) return { success: false, error: 'message.text required' };
+
+    const messagesRef = collection(db, 'discussionRooms', discussionId, 'messages');
+    await addDoc(messagesRef, {
+      sender: message.sender || 'user',
+      message: message.text,
+      timestamp: message.ts || serverTimestamp()
+    });
+
+    // Update updatedAt on parent discussion
+    await updateDoc(doc(db, 'discussionRooms', discussionId), { updatedAt: serverTimestamp() });
+
+    return { success: true };
+  } catch (error) {
+    console.error('addConversationMessage error:', error);
+    return { success: false, error: error.message || String(error) };
+  }
+};
+
+/** ---------------- Discussion Status ---------------- **/
+
+export const updateDiscussionStatus = async (discussionId, status, extras = {}) => {
+  try {
+    if (!discussionId) return { success: false, error: 'discussionId required' };
+    await updateDoc(doc(db, 'discussionRooms', discussionId), {
+      status,
+      updatedAt: serverTimestamp(),
+      ...extras
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('updateDiscussionStatus error:', error);
+    return { success: false, error: error.message || String(error) };
+  }
+};
+
+export const pauseDiscussion = (discussionId) =>
+  updateDiscussionStatus(discussionId, 'paused', { pausedAt: serverTimestamp() });
+
+export const resumeDiscussion = (discussionId) =>
+  updateDiscussionStatus(discussionId, 'active', { resumedAt: serverTimestamp() });
+
+export const completeDiscussion = async (discussionId, { feedback = null, score = null } = {}) => {
+  try {
+    if (!discussionId) return { success: false, error: 'discussionId required' };
+    const ref = doc(db, 'discussionRooms', discussionId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return { success: false, error: 'discussion not found' };
+
+    const data = snap.data();
+    const duration = computeDurationMinutes(data.createdAt);
+
+    await updateDoc(ref, {
+      status: 'completed',
+      isCompleted: true,
+      duration,
+      feedback,
+      score,
+      completedAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+
+    return { success: true };
   } catch (error) {
-    console.error('Error updating discussion status:', error);
-    throw error;
+    console.error('completeDiscussion error:', error);
+    return { success: false, error: error.message || String(error) };
   }
 };
 
+/** ---------------- Stats ---------------- **/
 
-
-export const completeDiscussion = async (discussionId, feedback = null, score = null) => {
+export const incrementDiscussionCounters = async (discussionId, { questions = 0, speechSeconds = 0 }) => {
   try {
-    const discussionRef = doc(db, 'discussionRooms', discussionId);
-    const discussionDoc = await getDoc(discussionRef);
-    
-    if (discussionDoc.exists()) {
-      const startTime = new Date(discussionDoc.data().createdAt);
-      const endTime = new Date();
-      const duration = Math.round((endTime - startTime) / (1000 * 60)); // in minutes
-      
-      await updateDoc(discussionRef, {
-        status: 'completed',
-        isCompleted: true,
-        duration: duration,
-        feedback: feedback,
-        score: score,
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-      
-      console.log('Discussion completed:', discussionId);
+    if (!discussionId) return { success: false, error: 'discussionId required' };
+    const payload = {
+      totalQuestions: increment(questions),
+      totalSpeechTime: increment(speechSeconds),
+      updatedAt: serverTimestamp()
+    };
+    await updateDoc(doc(db, 'discussionRooms', discussionId), payload);
+    return { success: true };
+  } catch (error) {
+    console.error('incrementDiscussionCounters error:', error);
+    return { success: false, error: error.message || String(error) };
+  }
+};
+
+/** ---------------- Full Feedback Generation ---------------- **/
+
+export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOption, topic) => {
+  try {
+    const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages');
+    const snapshot = await getDocs(query(messagesRef, orderBy('timestamp', 'asc')));
+    const messages = snapshot.docs.map(doc => doc.data());
+
+    if (messages.length === 0) throw new Error('No conversation found for feedback');
+
+    const conversationSummary = messages
+      .map(msg => `${msg.sender === 'user' ? 'Candidate' : 'Interviewer'}: ${msg.message}`)
+      .join('\n');
+
+    const expert = ExpertsList.find(opt => opt.name === practiceOption) || ExpertsList[0];
+    if (!expert || !expert.feedbackPrompt) throw new Error('No feedbackPrompt found');
+
+    const feedbackPrompt = expert.feedbackPrompt.replace('{user_topic}', topic || 'general topics');
+
+    const fullPrompt = `${feedbackPrompt}\n\nFull Conversation:\n${conversationSummary}\n\nProvide feedback as JSON array of points.`;
+
+    const result = await AIModel(topic, practiceOption, fullPrompt);
+    if (!result.success) throw new Error(result.error || 'AI feedback generation failed');
+
+    let feedbackArray;
+    try {
+      feedbackArray = JSON.parse(result.response);
+      if (!Array.isArray(feedbackArray)) throw new Error('AI did not return array');
+    } catch (e) {
+      // fallback: split by lines
+      feedbackArray = result.response
+        .split('\n')
+        .map(line => line.replace(/^- /, '').trim())
+        .filter(line => line.length > 0);
     }
-  } catch (error) {
-    console.error('Error completing discussion:', error);
-    throw error;
-  }
-};
 
-export const pauseDiscussion = async (discussionId) => {
-  try {
-    const discussionRef = doc(db, 'discussionRooms', discussionId);
-    await updateDoc(discussionRef, {
-      status: 'paused',
-      pausedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+    const roomRef = doc(db, 'discussionRooms', discussionRoomId);
+    await updateDoc(roomRef, {
+      feedback: arrayUnion({
+        generatedAt: new Date().toISOString(),
+        items: feedbackArray
+      }),
+      updatedAt: serverTimestamp()
     });
-    
-    console.log('Discussion paused:', discussionId);
+
+    return { success: true, feedback: feedbackArray };
   } catch (error) {
-    console.error('Error pausing discussion:', error);
-    throw error;
+    console.error('❌ Full feedback generation error:', error);
+    return { success: false, error: error.message };
   }
 };
 
-export const resumeDiscussion = async (discussionId) => {
-  try {
-    const discussionRef = doc(db, 'discussionRooms', discussionId);
-    await updateDoc(discussionRef, {
-      status: 'active',
-      resumedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-    
-    console.log('Discussion resumed:', discussionId);
-  } catch (error) {
-    console.error('Error resuming discussion:', error);
-    throw error;
-  }
+/** ---------------- Export ---------------- **/
+export default {
+  createDiscussionRoom,
+  getUserDiscussions,
+  getDiscussionById,
+  updateDiscussionStatus,
+  addConversationMessage,
+  completeDiscussion,
+  pauseDiscussion,
+  resumeDiscussion,
+  incrementDiscussionCounters,
+  generateAndSaveFullFeedback
 };
-
-const interviewService = () => {
-  return (
-    <div>interviewService</div>
-  )
-}
-
-export default interviewService

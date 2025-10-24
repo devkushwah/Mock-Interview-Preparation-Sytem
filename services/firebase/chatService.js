@@ -1,35 +1,75 @@
 import { db } from '@/lib/firebaseConfig'
-import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  getDocs,
+  query,
+  orderBy,
+  doc
+} from 'firebase/firestore'
 
 /**
- * Save a chat message to the discussionRoom's conversations array.
- * - Appends message using arrayUnion.
- * - Updates updatedAt.
+ * Save a chat message to subcollection:
+ * /discussionRooms/{roomId}/messages
  */
-export async function saveMessageToDiscussionRoom(discussionRoomId, sender, message) {
-  const roomRef = doc(db, 'discussionRooms', discussionRoomId)
-  const timestamp = Date.now()
-  const messageObj = { sender, message, timestamp }
+export async function saveMessage(discussionRoomId, sender, message, type = 'text') {
+  try {
+    if (!discussionRoomId || !sender || !message) {
+      throw new Error('Missing required parameters.')
+    }
 
-  // Only update (never create new doc here)
-  await updateDoc(roomRef, {
-    conversations: arrayUnion(messageObj),
-    updatedAt: serverTimestamp()
-  })
+    const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
+
+    const messageData = {
+      sender,
+      message,
+      type, // e.g. 'text' | 'audio' | 'system'
+      timestamp: serverTimestamp(),
+    }
+
+    const docRef = await addDoc(messagesRef, messageData)
+
+    console.log('💬 Message saved:', docRef.id)
+    return { id: docRef.id, ...messageData }
+  } catch (error) {
+    console.error('❌ Error saving message:', error)
+    throw new Error('Failed to save message.')
+  }
 }
 
 /**
- * Get all chat messages for a discussionRoom.
- * Returns the conversations array (ordered by timestamp).
+ * Get all messages for a discussionRoom (ordered by time ascending)
+ */
+export async function getMessages(discussionRoomId, limitCount = 100) {
+  try {
+    const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
+    const q = query(messagesRef, orderBy('timestamp', 'asc'))
+
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+  } catch (error) {
+    console.error('❌ Error fetching messages:', error)
+    throw new Error('Failed to load messages.')
+  }
+}
+
+/**
+ * Fetch ordered messages from subcollection /discussionRooms/{roomId}/messages
+ * Returns array of { id, sender, message, timestamp }
  */
 export async function getConversationHistory(discussionRoomId) {
-  const roomRef = doc(db, 'discussionRooms', discussionRoomId)
-  const snap = await getDoc(roomRef)
-  if (snap.exists()) {
-    const data = snap.data()
-    return Array.isArray(data.conversation)
-      ? [...data.conversation].sort((a, b) => a.timestamp - b.timestamp)
-      : []
+  if (!discussionRoomId) return []
+  try {
+    const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
+    const q = query(messagesRef, orderBy('timestamp', 'asc'))
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map(m => ({ id: m.id, ...m.data() }))
+  } catch (error) {
+    console.error('getConversationHistory error:', error)
+    return []
   }
-  return []
 }

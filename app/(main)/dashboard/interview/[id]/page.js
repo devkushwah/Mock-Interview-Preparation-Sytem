@@ -8,12 +8,15 @@ import { Interviewer } from '@/services/options'
 import { UserButton } from '@stackframe/stack'
 import { Button } from "@/components/ui/button"
 import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
+import InterviewEndDialog from '../../_components/InterviewEndDialog'
+import { completeDiscussion } from '@/services/firebase/discussionService'
 
 const InterviewPage = () => {
   const { id } = useParams()
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showEndDialog, setShowEndDialog] = useState(false)
   
   // Create interview context from discussion room data
   const interviewContext = discussionRoomData ? {
@@ -84,6 +87,12 @@ const InterviewPage = () => {
     if (discussionRoomData) {
       await connect(discussionRoomData)
     }
+  }
+
+  const handleEndInterview = async () => {
+    await disconnect()
+    await completeDiscussion(id)  // Yeh add karo
+    setShowEndDialog(true)
   }
 
   useEffect(() => {
@@ -178,7 +187,7 @@ const InterviewPage = () => {
 
             <div className="mt-5 flex items-center justify-center gap-4">
               {isConnected ? 
-                <Button variant="destructive" onClick={disconnect}>
+                <Button variant="destructive" onClick={handleEndInterview}>  // Yeh change karo
                   End Streaming Interview
                 </Button>
                 :
@@ -288,6 +297,13 @@ const InterviewPage = () => {
             </div>
         </div>
        </div>
+
+       {showEndDialog && (
+        <InterviewEndDialog 
+          discussionRoomId={id} 
+          onClose={() => setShowEndDialog(false)} 
+        />
+      )}
    </div>
   )
 }

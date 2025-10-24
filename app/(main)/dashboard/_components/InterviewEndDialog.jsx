@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getChatHistory } from '@/services/firebase/chatService'
+import { getConversationHistory } from '@/services/firebase/chatService'
 
 export default function InterviewEndDialog({ discussionRoomId, onClose }) {
   const [chatHistory, setChatHistory] = useState([])
@@ -9,7 +9,7 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
   useEffect(() => {
     const fetchChatHistory = async () => {
       if (discussionRoomId) {
-        const history = await getChatHistory(discussionRoomId)
+        const history = await getConversationHistory(discussionRoomId)
         setChatHistory(history)
         setLoading(false)
       }

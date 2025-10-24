@@ -42,7 +42,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
 
     setIsCreating(true);
     try {
-      const discussionData = await createDiscussionRoom({
+      const result = await createDiscussionRoom({
         userId: userData.id,
         practiceOption: interviewType.name,
         topic: topic,
@@ -51,10 +51,15 @@ const UserInputDialog = ( {children, interviewType} ) => {
         tags: extractTags(topic),
       });
 
-      console.log("Discussion room created:", discussionData.id);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create discussion room');
+      }
+
+      const discussionId = result.data.id;  // Yeh change karo
+      console.log("Discussion room created:", discussionId);
 
       // Fetch and log the document by ID for confirmation
-      const docRef = doc(db, 'discussionRooms', discussionData.id);
+      const docRef = doc(db, 'discussionRooms', discussionId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         console.log("Fetched discussion room data by ID:", docSnap.data());
@@ -62,7 +67,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
         console.log("No discussion room found with this ID!");
       }
 
-      router.push(`/dashboard/interview/${discussionData.id}`);
+      router.push(`/dashboard/interview/${discussionId}`);  // Yeh bhi change karo
 
       setIsOpen(false);
       resetForm();

@@ -9,25 +9,27 @@ const History = () => {
   const { userData } = useContext(UserContext);
   const [discussions, setDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
-    if (userData?.id) {
-      fetchDiscussions();
+    const fetchDiscussions = async () => {
+      try {
+        const result = await getUserDiscussions(userData.id, 10);
+        if (result.success) {
+          setDiscussions(result.data.items);  // Yeh change karo
+        } else {
+          setError(result.error);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [userData]);
 
-  const fetchDiscussions = async () => {
-    try {
-      setLoading(true);
-      const userDiscussions = await getUserDiscussions(userData.id, 10);
-      setDiscussions(userDiscussions);
-    } catch (error) {
-      console.error('Error fetching discussions:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (userData?.id) fetchDiscussions();
+  }, [userData]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -58,6 +60,20 @@ const History = () => {
               <div className="h-3 bg-gray-200 rounded w-3/4"></div>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <h2 className='font-bold text-xl mb-4'>Recent Interviews</h2>
+        <div className="p-8 border-2 border-dashed border-gray-200 rounded-lg text-center">
+          <div className="text-gray-500">
+            <p className="text-lg">No interviews yet</p>
+            <p className="text-sm mt-1">Start your first interview to build your history!</p>
+          </div>
         </div>
       </div>
     );
