@@ -144,10 +144,16 @@ const InterviewPage = () => {
         <div className='lg:col-span-2'>
           <div className='h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col items-center justify-center relative'>
               <img
-                  src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
-                  alt={discussionRoomData?.interviewerName || 'Interviewer'}
-                  className={`h-[80px] w-[80px] rounded-full object-cover ${isAiProcessing ? 'animate-pulse border-4 border-blue-400' : ''}`}
-              />
+  src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
+  alt={discussionRoomData?.interviewerName || 'Interviewer'}
+  className={`h-[80px] w-[80px] rounded-full object-cover transition-all duration-500 ${
+    isConnected 
+      ? 'animate-pulse border-4 border-green-400 shadow-lg shadow-green-400/50' 
+      : isAiProcessing 
+        ? 'animate-pulse border-4 border-blue-400' 
+        : 'border-2 border-gray-300'
+  }`}
+/>
               <h2 className="text-gray-800 mb-2">{discussionRoomData?.interviewerName}</h2>
               
               {/* Streaming TTS Indicator */}
@@ -200,16 +206,16 @@ const InterviewPage = () => {
 
             <div className="mt-5 flex items-center justify-center gap-4">
               {isConnected ? 
-                <Button variant="destructive" onClick={handleEndInterview}>  // Yeh change karo
-                  End Streaming Interview
+                <Button variant="destructive" onClick={handleEndInterview}>
+                  End Interview
                 </Button>
                 :
                 <Button 
                   onClick={handleConnect} 
                   disabled={isConnecting || !discussionRoomData}
-                  className="bg-blue-500 hover:bg-blue-600 text-white"
+                  className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg"
                 >
-                  {isConnecting ? 'Connecting TTS...' : 'Start Streaming AI Interview'}
+                  {isConnecting ? 'Connecting TTS...' : 'Start Interview'}
                 </Button>
               }
               
@@ -223,7 +229,7 @@ const InterviewPage = () => {
 
         <div>
              <div className='h-[60vh] bg-secondary border rounded-4xl p-4 flex flex-col relative overflow-hidden'>
-              <h2 className="font-bold mb-4 text-center">🎵 Streaming Interview Session</h2>
+              <h2 className="font-bold mb-4 text-center">Streaming Interview Session</h2>
               
               {/* Current Speech Display */}
               {(transcript || interimTranscript) && (
@@ -245,7 +251,7 @@ const InterviewPage = () => {
               <div className="flex-1 overflow-y-auto space-y-3 mb-4" id="conversation-container">
                 {conversationHistory.length === 0 && !isConnected && (
                   <div className="text-center text-gray-500 text-sm mt-8">
-                    🎙️ Click "Start Streaming AI Interview" to begin real-time voice conversation with TTS
+                    🎙️ Click "Start Interview" to begin real-time voice conversation with AI
                   </div>
                 )}
                 
@@ -285,7 +291,7 @@ const InterviewPage = () => {
                 
                 <div className="text-xs text-gray-600 p-2 bg-gray-50 rounded">
                   {!isConnected && !isConnecting && (
-                    <span className="text-gray-400">Ready for streaming TTS interview...</span>
+                    <span className="text-gray-400">Ready for streaming interview...</span>
                   )}
                   {isConnecting && (
                     <span className="text-yellow-600">🔌 Connecting to streaming TTS...</span>
@@ -300,14 +306,7 @@ const InterviewPage = () => {
               </div>
             </div>
             
-            <div className='mt-4 text-gray-600 text-sm'>
-              <p className="mb-2">
-                🎵 <strong>Streaming TTS Interview:</strong> Real-time voice conversation with instant audio responses
-              </p>
-              <p className="text-xs">
-                Powered by Deepgram Nova-3 transcription + Aura-2 streaming TTS
-              </p>
-            </div>
+
         </div>
        </div>
 

@@ -74,27 +74,22 @@ Ensure your feedback is constructive, supportive, and aimed at boosting the cand
 export const Interviewer = [
   {
     name: "Sarah Johnson",
-    avatar: "/icons/interviewer1.jpg",
+    avatar: "/avatars/avatar1.jpg",
     expertise: "Technical Interviews",
     description: "Senior Software Engineer with 8+ years experience"
   },
   {
     name: "Michael Chen", 
-    avatar: "/icons/interviewer2.jpg",
+    avatar: "/avatars/avatar2.jpg",
     expertise: "Behavioral Interviews",
     description: "HR Manager specializing in candidate assessment"
   },
   {
     name: "Emily Davis",
-    avatar: "/icons/interviewer3.jpg", 
+    avatar: "/avatars/avatar3.jpg",
     expertise: "System Design",
     description: "Principal Architect with expertise in scalable systems"
   },
-  {
-    name: "Alex Rodriguez",
-    avatar: "/icons/interviewer4.jpg",
-    expertise: "English Communication", 
-    description: "Language coach and communication specialist"
-  }
+ 
 ];
 
