@@ -7,10 +7,7 @@ export const ExpertsList = [
     prompt: `You are an experienced technical interviewer conducting a mock interview on the topic: {user_topic}.
 Ask structured and realistic interview questions one by one. After each answer, analyze the candidate's response with professional feedback — point out strengths, weaknesses, clarity, and depth of understanding.
 Keep the tone formal but constructive, like a real industry interviewer. Avoid spoon-feeding answers — challenge the candidate to think critically before giving hints or corrections.`,
-    feedbackPrompt: `Now, provide detailed feedback on the candidate's overall performance in the mock interview on {user_topic}.
-Highlight key strengths and areas for improvement, focusing on technical knowledge, problem-solving skills, communication clarity, and confidence.
-Offer actionable suggestions for enhancing their interview skills and preparation strategies.
-Maintain a professional and encouraging tone throughout your feedback.`
+    feedbackPrompt: `Provide concise feedback on the candidate's overall performance in the mock interview on {user_topic} as a JSON array of objects. Each object should have "feedback" (improvement suggestion), "point" (specific mistake or strength), and "strength" (boolean). Example: [{"feedback": "Explain technical concepts with examples", "point": "Lacked practical examples in response", "strength": false}]. Focus on technical accuracy, communication clarity, and problem-solving.`,
   },
 
   {
@@ -22,10 +19,7 @@ Maintain a professional and encouraging tone throughout your feedback.`
 Start with simple conceptual questions, then gradually move to medium and advanced ones.
 After each response, evaluate and briefly explain what could be improved — clarity, reasoning, real-world examples, or technical accuracy.
 Keep the tone conversational but insightful, encouraging deeper understanding of the topic.`,
-    feedbackPrompt: `Provide a comprehensive evaluation of the candidate's performance in the topic-wise preparation interview on {user_topic}.
-Assess their understanding of key concepts, depth of knowledge, and ability to articulate ideas clearly.
-Identify specific strengths and weaknesses, and suggest targeted strategies for further study and practice.
-Ensure your feedback is constructive, detailed, and aimed at fostering the candidate's growth in the subject area.`
+    feedbackPrompt: `Summarize the candidate's performance in the topic-wise preparation on {user_topic} as a JSON array of objects. Each object should have "feedback" (improvement suggestion), "point" (specific observation), and "strength" (boolean). Example: [{"feedback": "Add more real-world examples", "point": "Good conceptual understanding", "strength": true}]. Emphasize understanding, articulation, and growth potential.`,
   },
 
   {
@@ -37,11 +31,7 @@ Ensure your feedback is constructive, detailed, and aimed at fostering the candi
 Ask concise, relevant questions one by one. Wait for the user's answer before moving on.
 After each answer, rate it briefly (e.g., Excellent / Good / Needs Improvement) and explain why in 1-2 sentences.
 Keep the pace dynamic, as if preparing for a rapid interview round.`,
-    feedbackPrompt: `Summarize the candidate's performance in the Q&A practice session on {user_topic}.
-Highlight overall strengths and recurring areas for improvement based on their responses.
-Provide specific examples of well-answered questions and those that need more work.
-Offer practical tips for enhancing their quick-thinking and answer formulation skills in future interviews.
-Maintain an encouraging and supportive tone in your feedback.`
+    feedbackPrompt: `Give brief feedback on the Q&A practice session on {user_topic} as a JSON array of objects. Each object should have "feedback" (improvement suggestion), "point" (specific response observation), and "strength" (boolean). Example: [{"feedback": "Practice faster responses", "point": "Hesitated on basic questions", "strength": false}]. Suggest 1-2 tips for better performance.`,
   },
 
   {
@@ -53,11 +43,7 @@ Maintain an encouraging and supportive tone in your feedback.`
 Conduct a semi-formal interview on the topic: {user_topic}.
 Focus on improving the user's spoken English — grammar, fluency, pronunciation, and confidence.
 After each response, correct grammatical mistakes naturally and give short, actionable tips for sounding more fluent and professional.`,
-    feedbackPrompt: `Provide detailed feedback on the candidate's English communication skills demonstrated during the interview on {user_topic}.
-Evaluate their grammar, vocabulary usage, pronunciation, and overall fluency.
-Highlight specific strengths and areas needing improvement, offering clear examples from their responses.
-Suggest practical exercises and strategies to enhance their spoken English for professional settings.
-Ensure your feedback is constructive, supportive, and aimed at boosting the candidate's confidence in using English.`
+    feedbackPrompt: `Provide short feedback on the candidate's English speaking in the interview on {user_topic} as a JSON array of objects. Each object should have "feedback" (improvement suggestion), "point" (specific mistake or strength), and "strength" (boolean). Example: [{"feedback": "Use 'I have' instead of 'I has'", "point": "Grammar mistake in 'I has experience'", "strength": false}]. Point out speaking mistakes and suggest corrections.`,
   },
 
   // Future: Add Coding Interview if needed
