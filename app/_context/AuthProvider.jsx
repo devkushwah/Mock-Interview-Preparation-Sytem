@@ -24,7 +24,7 @@ const AuthProviderClient = ({ children }) => {
     const [isCreatingUser, setIsCreatingUser] = useState(false);
     const [userData, setUserData] = useState(null);
 
-    console.log("User in AuthProvider:", user);
+    // console.log("User in AuthProvider:", user);
     
     useEffect(() => {
         if (user && !isCreatingUser && !userData) {
