@@ -6,7 +6,7 @@ import { AIModel } from '@/services/GlobalServices'
 // Save message to subcollection: /discussionRooms/{roomId}/messages
 const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {
   const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
-  const messageObj = { sender, message, timestamp: Date.now() }
+  const messageObj = { sender, message, timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
   await addDoc(messagesRef, messageObj)
   // Update room's updatedAt
   const roomRef = doc(db, 'discussionRooms', discussionRoomId)
