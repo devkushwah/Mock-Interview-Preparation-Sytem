@@ -4,12 +4,15 @@ import React, { useEffect, useState, useContext } from 'react'
 import { UserContext } from '@/app/_context/UserContext'
 import { getUserDiscussions } from '@/services/firebase/discussionService'
 import { useRouter } from 'next/navigation'
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 const History = () => {
   const { userData } = useContext(UserContext);
   const [discussions, setDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedDiscussion, setSelectedDiscussion] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -109,19 +112,90 @@ const History = () => {
                     {discussion.duration > 0 && (
                       <span>{discussion.duration} min</span>
                     )}
-                    {discussion.conversation?.length > 0 && (
-                      <span>{discussion.conversation.length} exchanges</span>
-                    )} 
                   </div>
                 </div>
                 
-                <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(discussion.status)}`}>
-                  {discussion.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedDiscussion(discussion)
+                    }}
+                  >
+                    View Details
+                  </Button>
+                  
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(discussion.status)}`}>
+                    {discussion.status}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Dialog for discussion details */}
+      {selectedDiscussion && (
+        <Dialog open={!!selectedDiscussion} onOpenChange={() => setSelectedDiscussion(null)}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{selectedDiscussion.practiceOption} - {selectedDiscussion.topic}</DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              {/* Conversation */}
+              <div>
+                <h3 className="font-semibold mb-3">Conversation</h3>
+                {selectedDiscussion.conversation && selectedDiscussion.conversation.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {selectedDiscussion.conversation.map((msg, idx) => (
+                      <div key={idx} className={`p-3 rounded-lg ${
+                        msg.role === 'user' ? 'bg-blue-50 ml-4' : 'bg-green-50 mr-4'
+                      }`}>
+                        <div className="text-xs font-medium text-gray-500 mb-1">
+                          {msg.role === 'user' ? '👤 You:' : '🤖 AI:'}
+                        </div>
+                        <div className="text-sm">{msg.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No conversation recorded</p>
+                )}
+              </div>
+              
+              {/* Feedback */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <span className="text-blue-600">💡</span> AI Feedback
+                </h3>
+                {selectedDiscussion.feedback && selectedDiscussion.feedback.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedDiscussion.feedback.map((item, idx) => (
+                      <div key={idx} className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-400 rounded-lg shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 text-sm font-bold">{idx + 1}</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-blue-800 mb-1">{item.strength}</div>
+                            <div className="text-sm text-gray-700 mb-2">{item.feedback}</div>
+                            <div className="text-xs text-blue-600 font-medium">Points: {item.point}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No feedback available</p>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
