@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { db } from '@/lib/firebaseConfig'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore'  // Add this import
 import { Interviewer } from '@/services/options'
 import { UserButton } from '@stackframe/stack'
 import { Button } from "@/components/ui/button"
@@ -44,6 +44,7 @@ const InterviewPage = () => {
   const messagesRef = useRef([]) // authoritative list (mutates often, no re-renders)
   const flushTimerRef = useRef(null)
   const lastFlushAtRef = useRef(Date.now())
+  const [isEndingInterview, setIsEndingInterview] = useState(false)  // Add this state for loading
 
   // Memoized interviewContext to avoid passing new object every render
   const interviewContext = useMemo(() => {
@@ -203,41 +204,37 @@ const InterviewPage = () => {
    * This avoids blocking UI while AI runs feedback generation.
    */
   const handleEndInterview = useCallback(async () => {
+    setIsEndingInterview(true)
     try {
-      // disconnect WS/TTS first
+      if (isAiProcessing) {
+        console.log('Stopping ongoing TTS...')
+      }
       await disconnect()
-
-      // show dialog fast
+      
+      const feedbackResult = await generateAndSaveFullFeedback(
+        id,
+        interviewContext?.practiceOption,
+        interviewContext?.topic
+      )
+      if (!feedbackResult.success) {
+        console.error('Feedback generation failed:', feedbackResult.error)
+        await completeDiscussion(id, { feedback: null })
+      } else {
+        await completeDiscussion(id, { feedback: feedbackResult.feedback || null })
+      }
+      
+      // Save conversation to Firestore
+      if (conversationHistory && conversationHistory.length > 0) {
+        await updateDoc(doc(db, 'discussionRooms', id), { conversation: conversationHistory })
+      }
+      
       setShowEndDialog(true)
-
-      // background generation (do not await here to keep UI snappy)
-      ;(async () => {
-        try {
-          const feedbackResult = await generateAndSaveFullFeedback(
-            id,
-            interviewContext?.practiceOption,
-            interviewContext?.topic
-          )
-          if (!feedbackResult.success) {
-            if (feedbackResult.isRateLimit) {
-              console.warn('Rate limit hit for feedback generation')
-            } else {
-              console.error('Feedback generation failed:', feedbackResult.error)
-            }
-            // fallback: still mark discussion complete without feedback or mark pending
-            await completeDiscussion(id, { feedback: null })
-            return
-          }
-          // complete discussion and attach feedback (server will persist)
-          await completeDiscussion(id, { feedback: feedbackResult.feedback || null })
-        } catch (bgErr) {
-          console.error('Background feedback error:', bgErr)
-        }
-      })()
     } catch (err) {
       console.error('Error ending interview:', err)
+    } finally {
+      setIsEndingInterview(false)
     }
-  }, [disconnect, id, interviewContext])
+  }, [disconnect, id, interviewContext, isAiProcessing, conversationHistory])
 
   // Auto-scroll on aiResponse (but non-blocking)
   useEffect(() => {
@@ -343,22 +340,22 @@ const InterviewPage = () => {
           </div>
 
           <div className="mt-5 flex items-center justify-center gap-4">
-            {isConnected ?
-              <Button variant="destructive" onClick={handleEndInterview}>
+            {isConnected ? (
+              <Button variant="destructive" onClick={handleEndInterview} disabled={isEndingInterview}>
                 End Interview
               </Button>
-              :
+            ) : (
               <Button
                 onClick={handleConnect}
-                disabled={isConnecting || !discussionRoomData}
+                disabled={isConnecting || !discussionRoomData || isEndingInterview}
                 className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg"
               >
                 {isConnecting ? 'Connecting' : 'Start Interview'}
               </Button>
-            }
+            )}
 
             {(transcript || uiMessages.length > 0) && (
-              <Button variant="outline" onClick={handleClearSession}>
+              <Button variant="outline" onClick={handleClearSession} disabled={isEndingInterview}>
                 Clear Session
               </Button>
             )}
@@ -434,12 +431,21 @@ const InterviewPage = () => {
         </div>
       </div>
 
+      {isEndingInterview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="flex flex-col items-center gap-2 bg-white p-6 rounded-lg shadow-lg">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm text-gray-600">Just wait a few seconds, your feedback is being generated...</p>
+          </div>
+        </div>
+      )}
+
       {showEndDialog && (
         <InterviewEndDialog
           discussionRoomId={id}
           onClose={() => {
             setShowEndDialog(false)
-            router.push('/dashboard')
+            router.replace('/dashboard')  // Immediate navigation without delay
           }}
         />
       )}
