@@ -8,7 +8,8 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
-  runTransaction,  // Yeh add karo
+  runTransaction,
+  increment,  // Import increment for atomic updates
 } from 'firebase/firestore';
 
 // -------------------------------
@@ -24,10 +25,18 @@ const findUserByEmail = async (email) => {
   return snapshot.empty ? null : { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
 };
 
-/** Get current timestamp (ISO fallback for non-server environments) */
+/** Get current timestamp (readable for India timezone) */
 const getTimestamp = () => {
   try {
-    return serverTimestamp();
+    return new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   } catch {
     return new Date().toISOString();
   }
@@ -37,24 +46,26 @@ const getTimestamp = () => {
 // 👤 Main User Functions
 // -------------------------------
 
-/** Create user if doesn't exist */
+/** Create user if doesn't exist (simple check to avoid transaction errors) */
 export const createUser = async (userData) => {
   try {
+    if (!db) {
+      throw new Error('Firestore db is not initialized.');
+    }
     if (!userData?.email || !userData?.name) {
       throw new Error('Invalid user data: email and name are required.');
     }
 
-    // 1. Check for existing user
-    const existingUser = await findUserByEmail(userData.email);
+    const email = userData.email.trim().toLowerCase();
+    const existingUser = await findUserByEmail(email);
     if (existingUser) {
       console.log('User already exists:', existingUser.id);
       return existingUser;
     }
 
-    // 2. Prepare new user schema
     const newUser = {
       name: userData.name.trim(),
-      email: userData.email.trim().toLowerCase(),
+      email,
       avatar: userData.avatar || null,
       credit: 50000,
       isActive: true,
@@ -64,10 +75,8 @@ export const createUser = async (userData) => {
       lastLoginAt: getTimestamp(),
     };
 
-    // 3. Create user in Firestore
     const docRef = await addDoc(usersRef, newUser);
     console.log('✅ New user created:', docRef.id);
-
     return { id: docRef.id, ...newUser };
   } catch (error) {
     console.error('❌ Error creating user:', error.message);
@@ -107,14 +116,14 @@ export const updateUserCredit = async (userId, newCredit) => {
   }
 };
 
-/** Update user statistics */
+/** Update user statistics (increment totalInterviews) */
 export const updateUserStats = async (userId, stats = {}) => {
   try {
     if (!userId) throw new Error('User ID required for stats update.');
 
     const userRef = doc(db, 'users', userId);
     const updates = {
-      totalInterviews: stats.totalInterviews ?? 0,
+      totalInterviews: increment(stats.totalInterviews || 1),  // Increment by 1 or provided value
       lastLoginAt: getTimestamp(),
       updatedAt: getTimestamp(),
     };
@@ -168,5 +177,26 @@ export const updateUserCreditSafe = async (userId, creditDelta) => {
   } catch (error) {
     console.error('❌ Transaction failed:', error.message);
     throw new Error('Credit update failed. Please retry.');
+  }
+};
+
+const CreateNewUser = async () => {
+  if (!user?.primaryEmail || isCreatingUser) return;
+
+  setIsCreatingUser(true);
+  try {
+    const userData = {
+      name: user.displayName || user.primaryEmail.split('@')[0],
+      email: user.primaryEmail,
+      avatar: user.profileImageUrl || null,
+    };
+
+    const createdUser = await createUser(userData);
+    setUserData(createdUser);
+    console.log('User created/loaded:', createdUser);
+  } catch (error) {
+    console.error('Error creating user:', error);
+  } finally {
+    setIsCreatingUser(false);
   }
 };

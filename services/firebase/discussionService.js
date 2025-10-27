@@ -19,6 +19,7 @@ import {
 import { ExpertsList } from '@/services/options';
 import { AIModel } from '@/services/GlobalServices';
 import { callGemini } from '@/services/geminiService'; // Add this import for Gemini fallback
+import { updateUserStats } from './userService';
 
 /** ---------------- Helper Functions ---------------- **/
 
@@ -198,7 +199,7 @@ export const pauseDiscussion = (discussionId) =>
 export const resumeDiscussion = (discussionId) =>
   updateDiscussionStatus(discussionId, 'active', { resumedAt: serverTimestamp() });
 
-export const completeDiscussion = async (discussionId, { feedback = null, score = null } = {}) => {
+export const completeDiscussion = async (discussionId, { feedback = null, score = null, userId = null } = {}) => {
   try {
     if (!discussionId) return { success: false, error: 'discussionId required' };
     const ref = doc(db, 'discussionRooms', discussionId);
@@ -217,6 +218,11 @@ export const completeDiscussion = async (discussionId, { feedback = null, score 
       completedAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+
+    // Update user stats if userId provided
+    if (userId) {
+      await updateUserStats(userId, { totalInterviews: 1 });
+    }
 
     return { success: true };
   } catch (error) {
