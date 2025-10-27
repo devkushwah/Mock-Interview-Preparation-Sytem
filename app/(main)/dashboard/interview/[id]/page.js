@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react'  // useContext add karo yahan
+import { UserContext } from '@/app/_context/UserContext'  // Yeh import add karo
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { db } from '@/lib/firebaseConfig'
@@ -36,6 +37,7 @@ const FLUSH_INTERVAL_MS = 500 // ensure periodic flush for long streams
 const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
+  const { userData } = useContext(UserContext);  // Yeh line add karo yahan
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -195,6 +197,19 @@ const InterviewPage = () => {
 
   const handleConnect = useCallback(async () => {
     if (discussionRoomData) {
+      // Credit check before starting interview
+      try {
+        const { getUserCredits } = await import('@/services/firebase/userService');
+        const credits = await getUserCredits(discussionRoomData.userId);
+        if (credits < 500) { // Minimum credits to start (adjust as needed)
+          alert('Insufficient credits. You need at least 500 credits to start an interview.');
+          return;
+        }
+      } catch (error) {
+        console.error('Credit check failed:', error);
+        alert('Failed to check credits. Please try again.');
+        return;
+      }
       await connect(discussionRoomData)
     }
   }, [connect, discussionRoomData])
@@ -214,7 +229,8 @@ const InterviewPage = () => {
       const feedbackResult = await generateAndSaveFullFeedback(
         id,
         interviewContext?.practiceOption,
-        interviewContext?.topic
+        interviewContext?.topic,
+        discussionRoomData?.userId // Pass userId for credit deduction
       )
       if (!feedbackResult.success) {
         console.error('Feedback generation failed:', feedbackResult.error)
@@ -282,6 +298,7 @@ const InterviewPage = () => {
             {discussionRoomData?.practiceOption}
           </h2>
           <p className='text-gray-600 mt-1'>Topic: {discussionRoomData?.topic} | Difficulty: {discussionRoomData?.difficulty}</p>
+          <p className='text-gray-600 mt-1'>Credits: {userData?.credit || 0}</p> {/* Display credits */}
         </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
@@ -353,10 +370,10 @@ const InterviewPage = () => {
               ) : (
                 <Button
                   onClick={handleConnect}
-                  disabled={isConnecting || !discussionRoomData || isEndingInterview}
+                  disabled={isConnecting || !discussionRoomData || isEndingInterview || (userData?.credit < 500)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg shadow-lg"
                 >
-                  {isConnecting ? 'Connecting...' : 'Start Interview'}
+                  {isConnecting ? 'Connecting...' : (userData?.credit < 500 ? 'Insufficient Credits' : 'Start Interview')}
                 </Button>
               )}
 

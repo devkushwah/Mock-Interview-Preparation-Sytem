@@ -48,6 +48,16 @@ export async function POST(request) {
     if (userId && !checkRateLimit(userId)) {
       return NextResponse.json({ error: 'Rate limit exceeded. Please wait.' }, { status: 429 })
     }
+
+    // Credit check and deduction for message
+    if (userId) {
+      try {
+        const { deductCredits } = await import('@/services/firebase/userService');
+        await deductCredits(userId, 500); // Deduct 500 credits per message
+      } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+    }
     
     if (!message) {
       console.error('❌ No message provided')

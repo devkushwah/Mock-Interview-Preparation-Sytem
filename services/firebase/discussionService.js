@@ -251,8 +251,14 @@ export const incrementDiscussionCounters = async (discussionId, { questions = 0,
 
 /** ---------------- Full Feedback Generation ---------------- **/
 
-export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOption, topic) => {
+export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOption, topic, userId) => {
   try {
+    // Credit check and deduction for feedback
+    if (userId) {
+      const { deductCredits } = await import('./userService');
+      await deductCredits(userId, 2000); // Deduct 2000 credits per feedback generation
+    }
+
     const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages');
     const snapshot = await getDocs(query(messagesRef, orderBy('timestamp', 'asc')));
     const messages = snapshot.docs.map(doc => doc.data());

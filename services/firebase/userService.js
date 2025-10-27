@@ -5,6 +5,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,  // Add this import
   doc,
   updateDoc,
   serverTimestamp,
@@ -119,11 +120,11 @@ export const updateUserCredit = async (userId, newCredit) => {
 /** Update user statistics (increment totalInterviews) */
 export const updateUserStats = async (userId, stats = {}) => {
   try {
-    if (!userId) throw new Error('User ID required for stats update.');
+    if (!userId) throw new Error('userId required');
 
     const userRef = doc(db, 'users', userId);
     const updates = {
-      totalInterviews: increment(stats.totalInterviews || 1),  // Increment by 1 or provided value
+      totalInterviews: increment(stats.totalInterviews || 1),
       lastLoginAt: getTimestamp(),
       updatedAt: getTimestamp(),
     };
@@ -136,47 +137,42 @@ export const updateUserStats = async (userId, stats = {}) => {
   }
 };
 
-/**
- * Safely updates user credits using Firestore transactions
- * Prevents race conditions or overwrites
- * 
- * @param {string} userId - Firestore user document ID
- * @param {number} creditDelta - Amount to add/subtract (e.g. +500 or -1000)
- */
-export const updateUserCreditSafe = async (userId, creditDelta) => {
+/** Deduct credits from user (safe transaction) */
+export const deductCredits = async (userId, amount) => {
   try {
-    if (!userId || typeof creditDelta !== 'number') {
-      throw new Error('Invalid parameters: userId and creditDelta are required.');
-    }
+    if (!userId || typeof amount !== 'number' || amount <= 0) throw new Error('Invalid userId or amount');
 
     const userRef = doc(db, 'users', userId);
-
     await runTransaction(db, async (transaction) => {
       const userSnap = await transaction.get(userRef);
+      if (!userSnap.exists()) throw new Error('User not found');
 
-      if (!userSnap.exists()) {
-        throw new Error('User not found for credit update.');
-      }
-
-      const currentCredit = userSnap.data().credit || 0;
-      const newCredit = currentCredit + creditDelta;
-
-      if (newCredit < 0) {
-        throw new Error(`Insufficient credit. Current: ${currentCredit}, Tried: ${creditDelta}`);
-      }
+      const currentCredits = userSnap.data().credit || 0;
+      if (currentCredits < amount) throw new Error('Insufficient credits');
 
       transaction.update(userRef, {
-        credit: newCredit,
-        updatedAt: serverTimestamp(),
+        credit: increment(-amount),
+        updatedAt: getTimestamp(),
       });
-
-      console.log(`💰 Transaction success: User ${userId} → ${newCredit}`);
     });
 
-    return true;
+    console.log(`💰 Deducted ${amount} credits from user: ${userId}`);
   } catch (error) {
-    console.error('❌ Transaction failed:', error.message);
-    throw new Error('Credit update failed. Please retry.');
+    console.error('❌ Error deducting credits:', error.message);
+    throw new Error('Failed to deduct credits. ' + error.message);
+  }
+};
+
+/** Get user credits */
+export const getUserCredits = async (userId) => {
+  try {
+    if (!userId) throw new Error('userId required');
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    if (!userSnap.exists()) throw new Error('User not found');
+    return userSnap.data().credit || 0;
+  } catch (error) {
+    console.error('❌ Error getting credits:', error.message);
+    throw new Error('Failed to get credits.');
   }
 };
 

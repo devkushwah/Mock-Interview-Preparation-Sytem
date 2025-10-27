@@ -61,7 +61,7 @@ const AuthProviderClient = ({ children }) => {
 
     return (
         <div>
-            <UserContext.Provider value={{ userData, setUserData, isCreatingUser }}>
+            <UserContext.Provider value={{ userData, setUserData, isCreatingUser, credits: userData?.credit || 0 }}>
                 {children}
             </UserContext.Provider>
         </div>
