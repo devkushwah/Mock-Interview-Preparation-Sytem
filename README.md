@@ -1,36 +1,132 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-## Getting Started
+# 🧠 AIInterviewPro – AI-powered Mock Interview & English Coach Platform
 
-First, run the development server:
+AIInterviewPro is an **AI-driven mock interview and English practice platform** that helps users prepare for technical and behavioral interviews through **real-time AI simulations**, **personalized feedback**, and **voice-based interactions**.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Features
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+### 🎯 **Interview Modes**
+- **Interview Mode:** Simulates a real interview environment with AI asking questions and giving instant feedback.
+- **English Practice:** Speak with an AI English coach that corrects your grammar, fluency, and pronunciation.
+- **Topic/Question Practice:** Focused practice sessions on specific topics or question sets.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 💬 **Interactive Conversations**
+- Integrated **Speech-to-Text (STT)** and **Text-to-Speech (TTS)** using **Deepgram** for seamless voice-based communication.
+- Full **conversation transcripts** are saved for review after each session.
 
-## Learn More
+### 📊 **Feedback & History**
+- Receive **detailed performance feedback** after each interview.
+- Access your **complete interview history** anytime to analyze growth and improvement.
 
-To learn more about Next.js, take a look at the following resources:
+### 💳 **Credit-Based Usage**
+- Users receive credits on signup, which are consumed during interactions.
+- Managed using **Firebase Authentication** and **Firestore** for real-time tracking.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 💻 **Responsive Design**
+- Built with **Next.js**, **Tailwind CSS**, and **Shadcn UI** for a fast, elegant, and consistent experience across all devices.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 🧩 Tech Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Category | Technologies Used |
+|-----------|-------------------|
+| **Frontend** | Next.js, JavaScript, Tailwind CSS, Shadcn UI |
+| **Backend / Database** | Firebase (Auth + Firestore) |
+| **AI / NLP** | Gemini API (via OpenRouter) |
+| **Speech Processing** | Deepgram (STT/TTS) |
+| **State Management** | React Hooks, Context API |
+| **Version Control** | Git, GitHub |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## ⚙️ Installation & Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/<your-username>/AIInterviewPro.git
+   cd AIInterviewPro
+
+
+2. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables**
+   Create a `.env.local` file and add:
+
+   ```bash
+   NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+   NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+   NEXT_PUBLIC_DEEPGRAM_API_KEY=your_deepgram_key
+   NEXT_PUBLIC_OPENROUTER_API_KEY=your_openrouter_key
+   NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
+   ```
+
+4. **Run the development server**
+
+   ```bash
+   npm run dev
+   ```
+
+5. **Open in browser**
+
+   ```
+   http://localhost:3000
+   ```
+
+---
+
+## 🧠 How It Works
+
+1. User selects a mode (Interview / English Practice / Topic Practice).
+2. App connects with AI backend (Gemini API via OpenRouter).
+3. Voice input processed via Deepgram STT → AI generates response → Speech output via TTS.
+4. Full conversation + feedback stored in Firebase.
+5. User can revisit and analyze past sessions anytime.
+
+---
+
+## 📸 Screenshots *(Optional)*
+
+> You can add screenshots here later, like:
+>
+> * Dashboard
+> * Interview interface
+> * Feedback screen
+> * History page
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](LICENSE).
+
+---
+
+## 🤝 Contributing
+
+Pull requests are welcome!
+For major changes, please open an issue first to discuss what you’d like to change.
+
+---
+
+## 👤 Author
+
+**Dev Kushwah**
+📧 [devkushwah880@gmail.com](mailto:devkushwah880@gmail.com)
+
+
+---
+
+⭐ If you like this project, don’t forget to **star** the repo!
+
+
