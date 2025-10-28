@@ -109,9 +109,7 @@ const History = () => {
                   
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span>{formatDate(discussion.createdAt)}</span>
-                    {discussion.duration > 0 && (
-                      <span>{discussion.duration} min</span>
-                    )}
+                    
                   </div>
                 </div>
                 
