@@ -1,4 +1,3 @@
-
 # 🧠 AIInterviewPro – AI-powered Mock Interview & English Coach Platform
 
 AIInterviewPro is an **AI-driven mock interview and English practice platform** that helps users prepare for technical and behavioral interviews through **real-time AI simulations**, **personalized feedback**, and **voice-based interactions**.
@@ -34,9 +33,10 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
 | Category | Technologies Used |
 |-----------|-------------------|
 | **Frontend** | Next.js, JavaScript, Tailwind CSS, Shadcn UI |
-| **Backend / Database** | Firebase (Auth + Firestore) |
+| **Backend / Database** | Firebase (Auth + Firestore), Stack Auth |
 | **AI / NLP** | Gemini API (via OpenRouter) |
 | **Speech Processing** | Deepgram (STT/TTS) |
+| **Real-Time Communication** | WebSocket |
 | **State Management** | React Hooks, Context API |
 | **Version Control** | Git, GitHub |
 
@@ -46,9 +46,8 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/<your-username>/AIInterviewPro.git
-   cd AIInterviewPro
-
+   git clone https://github.com/devkushwah/Mock-Interview-Preparation-Sytem.git
+   ```
 
 2. **Install dependencies**
 
@@ -60,15 +59,28 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
    Create a `.env.local` file and add:
 
    ```bash
-   NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
-   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
-   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-   NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-   NEXT_PUBLIC_DEEPGRAM_API_KEY=your_deepgram_key
-   NEXT_PUBLIC_OPENROUTER_API_KEY=your_openrouter_key
-   NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
+# Stack Auth (for authentication)
+NEXT_PUBLIC_STACK_PROJECT_ID=your_stack_project_id
+NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY=your_stack_publishable_client_key
+STACK_SECRET_SERVER_KEY=your_stack_secret_server_key
+
+# Firebase (Auth + Firestore + Database)
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+
+# Speech Processing
+NEXT_PUBLIC_DEEPGRAM_API_KEY=your_deepgram_key
+DEEPGRAM_API_KEY=your_deepgram_key
+
+# AI / NLP
+NEXT_PUBLIC_OPENAI_ROUTER_KEY=your_openrouter_key
+NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_key
+NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
    ```
 
 4. **Run the development server**
@@ -95,16 +107,7 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
 
 ---
 
-## 📸 Screenshots *(Optional)*
 
-> You can add screenshots here later, like:
->
-> * Dashboard
-> * Interview interface
-> * Feedback screen
-> * History page
-
----
 
 ## 📄 License
 
