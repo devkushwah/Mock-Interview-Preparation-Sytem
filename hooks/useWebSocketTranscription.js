@@ -219,29 +219,29 @@ export const useWebSocketTranscription = () => {
     // Update last speech time
     lastSpeechTimeRef.current = Date.now()
 
-    console.log('⏱️ User paused, waiting 4 seconds for more input...')
+    console.log('⏱️ User paused, waiting 1.5 seconds for more input...')  // Updated from 0.5 to 1.5
 
-    // Wait 4 seconds after final transcript to ensure user is done speaking
+    // Wait 1.5 seconds after final transcript to ensure user is done speaking  // Updated from 0.5 to 1.5
     speechTimeoutRef.current = setTimeout(() => {
       // Double check that no new speech has started in the meantime
       const timeSinceLastSpeech = Date.now() - lastSpeechTimeRef.current
       
-      if (timeSinceLastSpeech >= 4000 && accumulatedTranscriptRef.current.trim()) {
+      if (timeSinceLastSpeech >= 1500 && accumulatedTranscriptRef.current.trim()) {  // Changed from 500 to 1500
         const completeTranscript = accumulatedTranscriptRef.current.trim()
         
         // Only process if we have new content
         if (completeTranscript !== lastProcessedTranscriptRef.current) {
-          console.log('✅ 4 seconds passed, processing complete transcript:', completeTranscript)
+          console.log('✅ 1.5 seconds passed, processing complete transcript:', completeTranscript)  // Updated from 0.5 to 1.5
           generateAIResponse(completeTranscript, discussionRoomData)
         } else {
           console.log('🔄 Same transcript already processed, skipping...')
         }
-      } else if (timeSinceLastSpeech < 4000) {
+      } else if (timeSinceLastSpeech < 1500) {  // Changed from 500 to 1500
         console.log('🔄 User still speaking, extending wait time...')
         // If user spoke again within the timeout, restart the timer
         handleSpeechComplete('', discussionRoomData) // Empty string since we already accumulated
       }
-    }, 4000)
+    }, 1500)  // Changed from 500 to 1500
 
   }, [generateAIResponse])
 

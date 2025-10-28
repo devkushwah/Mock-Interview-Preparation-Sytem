@@ -298,7 +298,7 @@ const InterviewPage = () => {
             {discussionRoomData?.practiceOption}
           </h2>
           <p className='text-gray-600 mt-1'>Topic: {discussionRoomData?.topic} | Difficulty: {discussionRoomData?.difficulty}</p>
-          <p className='text-gray-600 mt-1'>Credits: {userData?.credit || 0}</p> {/* Display credits */}
+          <p className='text-gray-600 mt-1'>Total Credits: {userData?.credit || 0}</p> {/* Display credits */}
         </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
@@ -328,8 +328,8 @@ const InterviewPage = () => {
                     <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                     <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                   </div>
-                  <div className="text-sm text-blue-700 font-medium">🎙️ Streaming Response...</div>
-                  <div className="text-xs text-gray-600 mt-1">AI is speaking via Deepgram TTS</div>
+                  <div className="text-sm text-blue-700 font-medium">Streaming Response...</div>
+                  
                 </div>
               )}
 
@@ -388,20 +388,6 @@ const InterviewPage = () => {
           <div>
             <div className='h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden shadow-xl'>
               <h2 className="font-bold mb-4 text-center text-lg text-gray-800">🎵 Streaming Interview Session</h2>
-
-              {/* Current Speech Display */}
-              {(transcript || interimTranscript) && (
-                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 rounded-lg shadow-sm">
-                  <div className="text-xs font-medium text-blue-600 mb-2">You're saying:</div>
-                  {transcript && <div className="text-sm text-gray-700 mb-1">{transcript}</div>}
-                  {interimTranscript && (
-                    <div className="text-sm text-gray-500 italic">
-                      {interimTranscript}
-                      <span className="animate-pulse ml-1">●</span>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Conversation History */}
               <div className="flex-1 overflow-y-auto space-y-3 mb-4" id="conversation-container">
