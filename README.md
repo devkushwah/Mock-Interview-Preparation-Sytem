@@ -74,13 +74,11 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
    NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
 
    # Speech Processing
-   ASSEMBLYAI_API_KEY=your_assemblyai_key
    NEXT_PUBLIC_DEEPGRAM_API_KEY=your_deepgram_key
    DEEPGRAM_API_KEY=your_deepgram_key
 
    # AI / NLP
    NEXT_PUBLIC_OPENAI_ROUTER_KEY=your_openrouter_key
-   NEXT_PUBLIC_GROQ_API_KEY=your_groq_key
    NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_key
    NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
 ````
