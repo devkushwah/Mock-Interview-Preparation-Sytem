@@ -30,15 +30,15 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
 
 ## 🧩 Tech Stack
 
-| Category | Technologies Used |
-|-----------|-------------------|
-| **Frontend** | Next.js, JavaScript, Tailwind CSS, Shadcn UI |
-| **Backend / Database** | Firebase (Auth + Firestore), Stack Auth |
-| **AI / NLP** | Gemini API (via OpenRouter) |
-| **Speech Processing** | Deepgram (STT/TTS) |
-| **Real-Time Communication** | WebSocket |
-| **State Management** | React Hooks, Context API |
-| **Version Control** | Git, GitHub |
+| Category              | Technologies Used                          |
+|-----------------------|--------------------------------------------|
+| **Frontend**          | Next.js, JavaScript, Tailwind CSS, Shadcn UI |
+| **Backend / Database**| Firebase (Auth + Firestore), Stack Auth    |
+| **AI / NLP**          | Gemini API (via OpenRouter)                |
+| **Speech Processing** | Deepgram (STT/TTS)                         |
+| **Real-Time Communication** | WebSocket                              |
+| **State Management**  | React Hooks, Context API                   |
+| **Version Control**   | Git, GitHub                                |
 
 ---
 
@@ -50,14 +50,12 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
    ```
 
 2. **Install dependencies**
-
    ```bash
    npm install
    ```
 
-3. **Set up environment variables**
-   Create a [.env.local](http://_vscodecontentref_/4) file and add:
-
+3. **Set up environment variables**  
+   Create a `.env.local` file and add:
    ```bash
    # Stack Auth (for authentication)
    NEXT_PUBLIC_STACK_PROJECT_ID=your_stack_project_id
@@ -81,16 +79,14 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
    NEXT_PUBLIC_OPENAI_ROUTER_KEY=your_openrouter_key
    NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_key
    NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
-````
+   ```
 
 4. **Run the development server**
-
    ```bash
    npm run dev
    ```
 
 5. **Open in browser**
-
    ```
    http://localhost:3000
    ```
@@ -107,8 +103,6 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
 
 ---
 
-
-
 ## 📄 License
 
 This project is open-source and available under the [MIT License](LICENSE).
@@ -117,16 +111,15 @@ This project is open-source and available under the [MIT License](LICENSE).
 
 ## 🤝 Contributing
 
-Pull requests are welcome!
+Pull requests are welcome!  
 For major changes, please open an issue first to discuss what you’d like to change.
 
 ---
 
 ## 👤 Author
 
-**Dev Kushwah**
+**Dev Kushwah**  
 📧 [devkushwah880@gmail.com](mailto:devkushwah880@gmail.com)
-
 
 ---
 
