@@ -56,32 +56,34 @@ AIInterviewPro is an **AI-driven mock interview and English practice platform** 
    ```
 
 3. **Set up environment variables**
-   Create a `.env.local` file and add:
+   Create a [.env.local](http://_vscodecontentref_/4) file and add:
 
    ```bash
-# Stack Auth (for authentication)
-NEXT_PUBLIC_STACK_PROJECT_ID=your_stack_project_id
-NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY=your_stack_publishable_client_key
-STACK_SECRET_SERVER_KEY=your_stack_secret_server_key
+   # Stack Auth (for authentication)
+   NEXT_PUBLIC_STACK_PROJECT_ID=your_stack_project_id
+   NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY=your_stack_publishable_client_key
+   STACK_SECRET_SERVER_KEY=your_stack_secret_server_key
 
-# Firebase (Auth + Firestore + Database)
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+   # Firebase (Auth + Firestore + Database)
+   NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+   NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+   NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
 
-# Speech Processing
-NEXT_PUBLIC_DEEPGRAM_API_KEY=your_deepgram_key
-DEEPGRAM_API_KEY=your_deepgram_key
+   # Speech Processing
+   ASSEMBLYAI_API_KEY=your_assemblyai_key
+   NEXT_PUBLIC_DEEPGRAM_API_KEY=your_deepgram_key
+   DEEPGRAM_API_KEY=your_deepgram_key
 
-# AI / NLP
-NEXT_PUBLIC_OPENAI_ROUTER_KEY=your_openrouter_key
-NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_key
-NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
-   ```
+   # AI / NLP
+   NEXT_PUBLIC_OPENAI_ROUTER_KEY=your_openrouter_key
+   NEXT_PUBLIC_GROQ_API_KEY=your_groq_key
+   NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_key
+   NEXT_PUBLIC_GEMINI_MODEL=gemini-1.5-pro
+````
 
 4. **Run the development server**
 
