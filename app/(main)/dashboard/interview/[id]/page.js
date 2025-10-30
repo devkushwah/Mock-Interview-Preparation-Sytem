@@ -34,6 +34,24 @@ const debounce = (fn, wait = 100) => {
 const FLUSH_BATCH_SIZE = 6 // tune this: larger => fewer renders but slower UI updates
 const FLUSH_INTERVAL_MS = 500 // ensure periodic flush for long streams
 
+// Pre-defined initial message from the interviewer (only 1 message, hardcoded for speed)
+const initialMessage = {
+  role: 'assistant',
+  content: 'Hello! To get started, please tell me a little about yourself. This will help me tailor the interview to your experience.'
+}
+
+// Fallback TTS function using browser speech synthesis (for initial message only)
+const playTTS = (text) => {
+  if ('speechSynthesis' in window) {
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 1 // Adjust speed if needed
+    utterance.pitch = 1 // Adjust pitch if needed
+    window.speechSynthesis.speak(utterance)
+  } else {
+    console.warn('TTS not supported in this browser')
+  }
+}
+
 const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
@@ -61,7 +79,7 @@ const InterviewPage = () => {
     // do not force UI re-render here; feed into hook's internal state or messagesRef if needed
   }, [])
 
-  // Hook -- keep using it but avoid re-render spam
+  // Hook -- removed initialMessage to prevent loop in hook/API
   const {
     transcript,
     interimTranscript,
@@ -78,6 +96,7 @@ const InterviewPage = () => {
     interviewContext,
     discussionRoomData,
     handleTranscriptReady
+    // Removed: initialMessage -- handled in component only
   )
 
   /**
@@ -112,13 +131,14 @@ const InterviewPage = () => {
   /**
    * Sync incoming conversationHistory from hook -> messagesRef
    * The hook may provide many small updates. We keep them in messagesRef and flush to UI in batches.
+   * Now includes the initial message if provided by the hook.
    */
   useEffect(() => {
     if (!conversationHistory || conversationHistory.length === 0) return
 
     // Append new items into messagesRef (assume conversationHistory contains incremental messages)
     // To avoid duplications, we append only messages that aren't already present by shallow check of length or timestamps.
-    // Simpler: replace messagesRef entirely if length differs significantly (safe fallback).
+    // Simpler: replace messagesRef entirely if conversationHistory looks authoritative from hook
     try {
       const currentLen = messagesRef.current.length
       // If lengths the same, assume no new messages
@@ -211,6 +231,10 @@ const InterviewPage = () => {
         return;
       }
       await connect(discussionRoomData)
+      // Add initial message to UI and play TTS immediately after connect
+      messagesRef.current = [initialMessage]
+      setUiMessages([initialMessage])
+      playTTS(initialMessage.content)  // Play initial message via browser TTS
     }
   }, [connect, discussionRoomData])
 
@@ -302,7 +326,7 @@ const InterviewPage = () => {
         </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
-          <div className='lg:col-span-2'>
+          <div className='lg:col-span-1'>  {/* Changed from lg:col-span-2 to lg:col-span-1 to shrink left panel */}
             <div className='h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center relative shadow-xl'>
               <div className='absolute top-4 right-4'>
                 <UserButton />
@@ -311,7 +335,7 @@ const InterviewPage = () => {
                 loading="lazy"
                 src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
                 alt={discussionRoomData?.interviewerName || 'Interviewer'}
-                className={`h-24 w-24 rounded-full object-cover transition-all duration-500 ${
+                className={`h-20 w-20 rounded-full object-cover transition-all duration-500 ${
                   isConnected
                     ? 'animate-pulse border-4 border-green-400 shadow-lg shadow-green-400/50'
                     : isAiProcessing
@@ -330,14 +354,6 @@ const InterviewPage = () => {
                   </div>
                   <div className="text-sm text-blue-700 font-medium">Streaming Response...</div>
                   
-                </div>
-              )}
-
-              {aiResponse && !isAiProcessing && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-5 max-w-md text-center mt-6 shadow-md">
-                  <div className="text-sm text-green-800 font-medium mb-2">AI Interviewer:</div>
-                  <div className="text-sm text-gray-700">{aiResponse}</div>
-                  <div className="text-xs text-green-600 mt-2">✅ Audio played</div>
                 </div>
               )}
 
@@ -362,52 +378,26 @@ const InterviewPage = () => {
               )}
             </div>
 
-            <div className="mt-6 flex items-center justify-center gap-4">
-              {isConnected ? (
-                <Button variant="destructive" onClick={handleEndInterview} disabled={isEndingInterview} className="px-6 py-3 text-lg">
-                  End Interview
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleConnect}
-                  disabled={isConnecting || !discussionRoomData || isEndingInterview || (userData?.credit < 500)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg shadow-lg"
-                >
-                  {isConnecting ? 'Connecting...' : (userData?.credit < 500 ? 'Insufficient Credits' : 'Start Interview')}
-                </Button>
-              )}
-
-              {(transcript || uiMessages.length > 0) && (
-                <Button variant="outline" onClick={handleClearSession} disabled={isEndingInterview} className="px-6 py-3">
-                  Clear Session
-                </Button>
-              )}
-            </div>
+            {/* Removed button container from here */}
           </div>
 
-          <div>
+          <div className='lg:col-span-2'>  {/* Changed from implicit 1 to lg:col-span-2 to expand right panel */}
             <div className='h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden shadow-xl'>
-              <h2 className="font-bold mb-4 text-center text-lg text-gray-800">🎵 Streaming Interview Session</h2>
+            
 
               {/* Conversation History */}
-              <div className="flex-1 overflow-y-auto space-y-3 mb-4" id="conversation-container">
-                {uiMessages.length === 0 && !isConnected && (
-                  <div className="text-center text-gray-500 text-sm mt-8">
-                    🎙️ Click "Start Interview" to begin real-time voice conversation with AI
-                  </div>
-                )}
-
+              <div className="flex-1 overflow-y-auto space-y-2 mb-4" id="conversation-container">  {/* Reduced space-y from 3 to 2 */}
                 {uiMessages.map((message, index) => (
-                  <div key={index} className={`p-4 rounded-lg shadow-sm ${
+                  <div key={index} className={`p-3 rounded-lg shadow-sm min-h-[2rem] ${  // Reduced p from 4 to 3, added min-h for consistent height
                     message.role === 'user'
                       ? 'bg-blue-50 border-l-4 border-blue-400 ml-4'
                       : 'bg-green-50 border-l-4 border-green-400 mr-4'
                   }`}>
-                    <div className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
+                    <div className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">  {/* Reduced text from sm to xs */}
                       {message.role === 'user' ? '👤 You:' : '🤖 AI Interviewer:'}
                       {message.role === 'assistant' && <span className="text-green-600">🔊</span>}
                     </div>
-                    <div className="text-sm text-gray-700">{message.content}</div>
+                    <div className="text-xs text-gray-700">{message.content}</div>  {/* Reduced text from sm to xs */}
                   </div>
                 ))}
               </div>
@@ -438,6 +428,29 @@ const InterviewPage = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Moved button container here, below the grid, centered across full width */}
+        <div className="mt-6 flex items-center justify-center gap-4">
+          {isConnected ? (
+            <Button variant="destructive" onClick={handleEndInterview} disabled={isEndingInterview} className="px-6 py-3 text-lg">
+              End Interview
+            </Button>
+          ) : (
+            <Button
+              onClick={handleConnect}
+              disabled={isConnecting || !discussionRoomData || isEndingInterview || (userData?.credit < 500)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg shadow-lg"
+            >
+              {isConnecting ? 'Connecting...' : (userData?.credit < 500 ? 'Insufficient Credits' : 'Start Interview')}
+            </Button>
+          )}
+
+          {(transcript || uiMessages.length > 0) && (
+            <Button variant="outline" onClick={handleClearSession} disabled={isEndingInterview} className="px-6 py-3">
+              Clear Session
+            </Button>
+          )}
         </div>
       </div>
 

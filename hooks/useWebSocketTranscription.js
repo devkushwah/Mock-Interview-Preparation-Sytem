@@ -2,7 +2,9 @@
 
 import { useState, useRef, useCallback } from 'react'
 
-export const useWebSocketTranscription = () => {
+export const useWebSocketTranscription = (interviewContext, discussionRoomData, handleTranscriptReady, options = {}) => {
+  const { startWithAI = false } = options;  // New flag
+
   const [transcript, setTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [aiResponse, setAiResponse] = useState('')
@@ -323,12 +325,23 @@ export const useWebSocketTranscription = () => {
         setIsConnecting(false)
       }
 
+      // If startWithAI is true, generate initial AI response
+      if (startWithAI) {
+        const initialTranscript = accumulatedTranscriptRef.current
+        if (initialTranscript) {
+          console.log('🤖 Generating initial AI response based on accumulated transcript:', initialTranscript)
+          generateAIResponse(initialTranscript, discussionRoomData)
+        } else {
+          console.log('🕒 No initial transcript available, AI response will be generated after user speaks')
+        }
+      }
+
     } catch (error) {
       console.error('Failed to connect:', error)
       setError('Failed to connect: ' + error.message)
       setIsConnecting(false)
     }
-  }, [initializeTTSConnection, handleSpeechComplete])
+  }, [initializeTTSConnection, handleSpeechComplete, startWithAI])
 
   const disconnect = useCallback(() => {
     // Clear all timeouts
