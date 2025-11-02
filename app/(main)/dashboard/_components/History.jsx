@@ -216,19 +216,36 @@ const History = () => {
               <h3 className='mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-500'>
                 <span className='text-lg'>💡</span> AI Feedback
               </h3>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+              <div className='space-y-4 rounded-2xl border border-indigo-100 bg-gradient-to-b from-yellow-50/60 to-white p-4 shadow-inner'>
                 {selectedDiscussion?.feedback?.length ? (
-                  selectedDiscussion.feedback.map((item, idx) => (
-                    <div key={idx} className='rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-white p-4'>
-                      <p className='text-xs font-semibold uppercase tracking-wide text-indigo-500'>
-                        {item.strength ? 'Strength' : 'Improvement'}
-                      </p>
-                      <p className='mt-2 text-sm font-semibold text-slate-900'>{item.point}</p>
-                      <p className='mt-2 text-sm text-slate-600'>{item.feedback}</p>
+                  selectedDiscussion.feedback.map((fb, index) => (
+                    <div
+                      key={index}
+                      className={`rounded-xl border p-4 transition ${
+                        fb.strength
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <div className='mb-2 flex items-center gap-2'>
+                        <span
+                          className={`text-sm font-semibold ${
+                            fb.strength ? 'text-green-700' : 'text-red-700'
+                          }`}
+                        >
+                          {fb.strength ? '✅ Strength' : '⚠️ Area for Improvement'}
+                        </span>
+                      </div>
+                      <div className='mb-2 text-sm text-slate-700'>
+                        <strong className='text-slate-900'>Point:</strong> {fb.point}
+                      </div>
+                      <div className='text-sm text-slate-700'>
+                        <strong className='text-slate-900'>Feedback:</strong> {fb.feedback}
+                      </div>
                     </div>
                   ))
                 ) : (
-                  <div className='col-span-full rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 p-6 text-center text-sm text-indigo-600'>
+                  <div className='rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 p-6 text-center text-sm text-indigo-600'>
                     Feedback will be available once analysis completes.
                   </div>
                 )}

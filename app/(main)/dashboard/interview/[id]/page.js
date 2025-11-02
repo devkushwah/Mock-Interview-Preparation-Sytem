@@ -325,9 +325,9 @@ const InterviewPage = () => {
           <p className='text-gray-600 mt-1'>Total Credits: {userData?.credit || 0}</p> {/* Display credits */}
         </div>
 
-        <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
-          <div className='lg:col-span-1'>  {/* Changed from lg:col-span-2 to lg:col-span-1 to shrink left panel */}
-            <div className='h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center relative shadow-xl'>
+        <div className='grid gap-8 lg:grid-cols-3'>
+          <div className='order-2 lg:order-1 lg:col-span-1'>
+            <div className='min-h-[18rem] lg:h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center relative shadow-xl'>
               <div className='absolute top-4 right-4'>
                 <UserButton />
               </div>
@@ -381,23 +381,26 @@ const InterviewPage = () => {
             {/* Removed button container from here */}
           </div>
 
-          <div className='lg:col-span-2'>  {/* Changed from implicit 1 to lg:col-span-2 to expand right panel */}
-            <div className='h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden shadow-xl'>
+          <div className='order-1 lg:order-2 lg:col-span-2'>
+            <div className='min-h-[60vh] lg:h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden shadow-xl'>
             
 
               {/* Conversation History */}
-              <div className="flex-1 overflow-y-auto space-y-2 mb-4" id="conversation-container">  {/* Reduced space-y from 3 to 2 */}
+              <div className="flex-1 overflow-y-auto space-y-3 mb-4 pb-2 pr-1 sm:pr-2" id="conversation-container">
                 {uiMessages.map((message, index) => (
-                  <div key={index} className={`p-3 rounded-lg shadow-sm min-h-[2rem] ${  // Reduced p from 4 to 3, added min-h for consistent height
-                    message.role === 'user'
-                      ? 'bg-blue-50 border-l-4 border-blue-400 ml-4'
-                      : 'bg-green-50 border-l-4 border-green-400 mr-4'
-                  }`}>
-                    <div className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">  {/* Reduced text from sm to xs */}
+                  <div
+                    key={index}
+                    className={`p-3 rounded-xl shadow-sm min-h-[2.25rem] ${
+                      message.role === 'user'
+                        ? 'bg-blue-50 border-l-4 border-blue-400 ml-1 sm:ml-4'
+                        : 'bg-green-50 border-l-4 border-green-400 mr-1 sm:mr-4'
+                    }`}
+                  >
+                    <div className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
                       {message.role === 'user' ? '👤 You:' : '🤖 AI Interviewer:'}
                       {message.role === 'assistant' && <span className="text-green-600">🔊</span>}
                     </div>
-                    <div className="text-xs text-gray-700">{message.content}</div>  {/* Reduced text from sm to xs */}
+                    <div className="text-sm text-gray-700 leading-relaxed">{message.content}</div>
                   </div>
                 ))}
               </div>

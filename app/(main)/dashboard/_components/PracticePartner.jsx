@@ -48,7 +48,7 @@ const PracticePartner = ({ credits = 0 }) => {
       {
         id: 'technical',
         name: 'Technical Interview',
-        description: 'Practice coding problems and system design with AI.',
+        description: 'Practice Any Technical Concept.',
         iconType: 'code'
       },
       {
@@ -65,7 +65,7 @@ const PracticePartner = ({ credits = 0 }) => {
       },
       {
         id: 'mock',
-        name: 'Full Mock Session',
+        name: 'Mixed Interview',
         description: 'Simulate a real interview with structured feedback.',
         iconType: 'mock'
       }

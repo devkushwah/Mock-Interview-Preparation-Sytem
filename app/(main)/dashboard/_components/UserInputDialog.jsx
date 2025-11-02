@@ -1,34 +1,40 @@
 'use client'
 
-import React, { useState, useContext } from 'react'
+import React, { useState, useContext, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog"
-import { Interviewer } from '@/services/options'
-import { DialogClose } from '@radix-ui/react-dialog';
 import { UserContext } from '@/app/_context/UserContext';
-import { createDiscussionRoom } from '@/services/firebase/discussionService'; // Fixed import
+import { createDiscussionRoom } from '@/services/firebase/discussionService';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore';
 
 const UserInputDialog = ( {children, interviewType} ) => {
   const { userData } = useContext(UserContext);
-  const [selectExpert, setSelectExpert] = useState(null);
-  // Default topic based on interview type
-  const defaultTopic = interviewType?.name === "English Practice" ? "English Practice" : "";
+  const practiceName = interviewType?.name || '';
+  const isEnglishPractice = practiceName === 'English Practice';
+  const requiresDetails = useMemo(
+    () => practiceName === 'Technical Interview' || practiceName === 'Mixed Interview',
+    [practiceName]
+  );
+  const defaultTopic = isEnglishPractice ? 'English Practice' : '';
   const [topic, setTopic] = useState(defaultTopic);
+  const [role, setRole] = useState('');
+  const [experience, setExperience] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const router = useRouter();
 
   const resetForm = () => {
-    setSelectExpert(null);
-    setTopic('');
+    setTopic(defaultTopic);
+    setRole('');
+    setExperience('');
   };
 
   const handleOpenChange = (open) => {
@@ -39,18 +45,26 @@ const UserInputDialog = ( {children, interviewType} ) => {
   };
 
   const handleStartInterview = async () => {
-    const finalTopic = interviewType?.name === "English Practice" ? "English Practice" : topic;
-    if (!finalTopic || !selectExpert || !userData?.id) return;
+    const finalTopic = isEnglishPractice
+      ? 'English Practice'
+      : requiresDetails
+        ? topic
+        : practiceName || 'Interview Practice';
+
+    if (!userData?.id) return;
+    if (requiresDetails && (!finalTopic || !role || !experience)) return;
 
     setIsCreating(true);
     try {
       const result = await createDiscussionRoom({
         userId: userData.id,
         practiceOption: interviewType.name,
-        topic: finalTopic,  // Use finalTopic
-        interviewerName: selectExpert,
+        topic: finalTopic,
+        interviewerName: null,
+        role: requiresDetails ? role : null,
+        experience: requiresDetails ? experience : null,
         difficulty: 'medium',
-        tags: extractTags(finalTopic),
+        tags: requiresDetails ? extractTags([finalTopic, role, experience].join(' ')) : [],
       });
 
       if (!result.success) {
@@ -90,65 +104,119 @@ const UserInputDialog = ( {children, interviewType} ) => {
     );
   };
 
+  const actionSummary = useMemo(() => {
+    if (requiresDetails) {
+      return [
+        'Define a focused interview topic.',
+        'Tell us the role you’re preparing for.',
+        'Share your current experience level.'
+      ]
+    }
+
+    return [
+      'Instant practice session with AI coach.',
+      'Adaptive prompts tailored to your responses.',
+      'Actionable feedback at the end of the session.'
+    ]
+  }, [requiresDetails])
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild onClick={() => setIsOpen(true)}>{children}</DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Select Interview Type & Topic</DialogTitle>
-          <div className="text-muted-foreground text-sm">
-            <div className="flex flex-col gap-4">
-              <h2 className="text-lg font-semibold">Choose Your Interviewer</h2>
-              {interviewType?.name !== "English Practice" && (
-                <textarea
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="Enter your topic here..."
-                  className="w-full p-3 border rounded-lg resize-none"
-                  rows={3}
-                />
-              )}
-              <div className="flex flex-col gap-2">
-                <h3 className="text-md font-medium">Select Expert</h3>
-                {Interviewer.map((interviewer, index) => (
-                  <div key={index} 
-                    onClick={() => setSelectExpert(interviewer.name)}
-                    className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      selectExpert === interviewer.name 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <img src={interviewer.avatar} alt={interviewer.name} 
-                      className={`w-12 h-12 rounded-full border-2 transition-all ${
-                        selectExpert === interviewer.name ? 'border-blue-500' : 'border-gray-200'
-                      }`} 
-                    />
-                    <h2 className={`font-medium text-lg transition-colors ${
-                      selectExpert === interviewer.name ? 'text-blue-600' : 'text-gray-700'
-                    }`}>
-                      {interviewer.name}
-                    </h2>
-                    {selectExpert === interviewer.name && (
-                      <div className='ml-auto'>
-                        <div className='w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center'>
-                          <div className='w-2 h-2 bg-white rounded-full'></div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button 
-                onClick={handleStartInterview}
-                disabled={isCreating || !selectExpert || (interviewType?.name !== "English Practice" && !topic)}
-                className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50"
-              >
-                {isCreating ? 'Starting...' : 'Start Interview'}
-              </button>
-            </div>
+      <DialogContent className="w-full max-w-[90vw] sm:max-w-sm space-y-3.5 px-4 py-4">
+        <div className="rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 px-3.5 py-3 text-white shadow-md">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            {practiceName || 'Interview'}
+          </span>
+          <h2 className="mt-1.5 text-lg font-semibold">
+            {requiresDetails ? 'Customize your mock interview' : 'Ready when you are'}
+          </h2>
+          <p className="mt-1 text-[11px] text-blue-100">
+            {requiresDetails
+              ? 'Help us craft relevant questions and realistic scenarios by filling in a few details.'
+              : 'Kick off a smart practice session instantly—no extra setup needed.'}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-background shadow-sm">
+          <div className="border-b border-slate-200 px-3.5 py-2.5">
+            <DialogHeader className="space-y-0.5 text-left">
+              <DialogTitle className="text-sm font-semibold text-slate-900">
+                Start {practiceName || 'Interview'} Session
+              </DialogTitle>
+              <DialogDescription className="text-[11px] text-slate-500">
+                {requiresDetails
+                  ? 'Share your target topic, role, and experience so we can tailor the interview.'
+                  : 'Jump right in—just press start to begin your AI-powered practice session.'}
+              </DialogDescription>
+            </DialogHeader>
           </div>
-        </DialogHeader>
+
+          <div className="px-3.5 py-3 space-y-2.5">
+            <ul className="grid gap-1.5 rounded-lg bg-slate-50/70 p-2.5 text-[11px] text-slate-600">
+              {actionSummary.map((item) => (
+                <li key={item} className="flex items-start gap-1.5">
+                  <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-blue-500" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+
+            {requiresDetails && (
+              <div className="space-y-2.5">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-slate-600">Focus topic</span>
+                  <textarea
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="e.g., System design for real-time analytics platforms"
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-background p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    rows={2}
+                  />
+                </label>
+
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-slate-600">Target role</span>
+                    <input
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      placeholder="e.g., Frontend Engineer"
+                      className="w-full rounded-lg border border-slate-200 bg-background p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-slate-600">Experience</span>
+                    <input
+                      value={experience}
+                      onChange={(e) => setExperience(e.target.value)}
+                      placeholder="e.g., 3 years"
+                      className="w-full rounded-lg border border-slate-200 bg-background p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {!requiresDetails && (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-3.5 py-2 text-[11px] text-slate-600">
+                You’re all set for {practiceName || 'this interview'}—hit Start Interview whenever you’re ready.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={handleStartInterview}
+          disabled={
+            isCreating ||
+            (requiresDetails && (!topic || !role || !experience))
+          }
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-blue-400"
+        >
+          {isCreating ? 'Starting...' : 'Start Interview'}
+        </button>
       </DialogContent>
     </Dialog>
   )

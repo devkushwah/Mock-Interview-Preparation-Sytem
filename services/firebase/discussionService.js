@@ -72,6 +72,8 @@ export const createDiscussionRoom = async (discussionData) => {
       practiceOption: discussionData.practiceOption,
       topic: discussionData.topic,
       interviewerName: discussionData.interviewerName || null,
+      role: discussionData.role || null,
+      experience: discussionData.experience || null,
       status: 'active',
       duration: 0,
       totalQuestions: 0,
