@@ -1,80 +1,204 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { useUser } from '@stackframe/stack'
-import { ExpertsList } from '@/services/options'
-import UserInputDialog from './UserInputDialog'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@stackframe/stack'
+import UserInputDialog from './UserInputDialog'
+// import { ExpertsList } from '@/constants/experts'
 
-const PracticePartner = () => {
+const PracticePartner = ({ credits = 0 }) => {
   const user = useUser()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate loading ExpertsList (replace with actual fetch if needed)
-    if (ExpertsList && ExpertsList.length > 0) {
-      setIsLoading(false)
-    }
+    const timer = setTimeout(() => setIsLoading(false), 250)
+    return () => clearTimeout(timer)
   }, [])
 
-  const handleProfileClick = () => {
-    // Navigate to profile page (adjust route as per your app)
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 18) return 'Good afternoon'
+    return 'Good evening'
+  }, [])
+
+  const features = useMemo(
+    () => [
+      'Real-time AI feedback',
+      'Speech recognition',
+      'Personalized difficulty',
+      'Detailed analytics'
+    ],
+    []
+  )
+
+  const stats = useMemo(
+    () => [
+      { number: '10K+', label: 'Active Users' },
+      { number: '50K+', label: 'Interviews' },
+      { number: '94%', label: 'Success Rate' },
+      { number: '8.5/10', label: 'Avg. Score' }
+    ],
+    []
+  )
+
+  const practiceOptions = useMemo(
+    () => [
+      {
+        id: 'technical',
+        name: 'Technical Interview',
+        description: 'Practice coding problems and system design with AI.',
+        iconType: 'code'
+      },
+      {
+        id: 'behavioral',
+        name: 'Behavioral Interview',
+        description: 'Master the STAR method and refine storytelling.',
+        iconType: 'chat'
+      },
+      {
+        id: 'english',
+        name: 'English Practice',
+        description: 'Boost your fluency and professional communication.',
+        iconType: 'english'
+      },
+      {
+        id: 'mock',
+        name: 'Full Mock Session',
+        description: 'Simulate a real interview with structured feedback.',
+        iconType: 'mock'
+      }
+    ],
+    []
+  )
+
+  const handleViewTracks = useCallback(() => {
+    const el = document?.getElementById('interview-tracks')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  const handleProfileClick = useCallback(() => {
     router.push('/dashboard/profile')
+  }, [router])
+
+  const renderIcon = (type) => {
+    switch (type) {
+      case 'chat':
+        return (
+          <svg xmlns='http://www.w3.org/2000/svg' className='h-7 w-7 text-pink-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={1.5} d='M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.89L3 20l1.11-3.03A7.962 7.962 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' />
+          </svg>
+        )
+      case 'english':
+        return (
+          <svg xmlns='http://www.w3.org/2000/svg' className='h-7 w-7 text-green-600' viewBox='0 0 24 24' fill='currentColor'>
+            <path d='M12 2a10 10 0 100 20 10 10 0 000-20zm1 5h-2v7h2V7zm-2 10a1 1 0 110-2 1 1 0 010 2z' />
+          </svg>
+        )
+      case 'mock':
+        return (
+          <svg xmlns='http://www.w3.org/2000/svg' className='h-7 w-7 text-orange-600' viewBox='0 0 24 24' fill='currentColor'>
+            <path d='M3 3h18v14H3zM7 20v-3h10v3H7z' />
+          </svg>
+        )
+      default:
+        return (
+          <svg xmlns='http://www.w3.org/2000/svg' className='h-7 w-7 text-indigo-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={1.5} d='M12 6v6m0 0v6m0-6h6m-6 0H6' />
+          </svg>
+        )
+    }
   }
 
   if (isLoading) {
     return (
-      <div className='p-6 flex justify-center items-center min-h-[400px]'>
-        <div className='text-gray-500'>Loading interview options...</div>
-      </div>
+      <div className='min-h-[320px] animate-pulse rounded-3xl bg-gradient-to-br from-white via-sky-50 to-white' />
     )
   }
 
   return (
-    <div className='p-6 max-w-7xl mx-auto'>
-      <div className='flex flex-col md:flex-row justify-between items-start md:items-center mb-10'>
-        <div>
-          <h1 className='font-medium text-gray-700 text-sm md:text-base'>My Workspace</h1>
-          <h1 className='font-bold text-2xl md:text-3xl mt-1'>
-            Welcome back, {user?.displayName || 'User'}!
-          </h1>
-        </div>
-        <button
-          onClick={handleProfileClick}
-          className="mt-4 md:mt-0 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Go to Profile"
-        >
-          Profile
-        </button>
-      </div>
+    <div className='min-h-screen w-full bg-gradient-to-br from-white via-sky-50 to-white py-12 px-4 sm:px-6 lg:px-8'>
+      <div className='mx-auto flex w-full max-w-6xl flex-col items-center'>
+        <header className='w-full text-center'>
+          <div className='mx-auto inline-flex items-center gap-2 rounded-full bg-blue-100/70 px-3 py-1 text-sm font-medium text-blue-700'>
+            <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4' />
+            </svg>
+            AI-Powered Interview Prep
+          </div>
 
-      <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-10'>
-        {ExpertsList.map((option, index) => (
-          <UserInputDialog interviewType={option} key={index}>
-            <div
-              className='p-6 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer flex flex-col items-center text-center min-h-[250px] group'
-              role="button"
-              tabIndex={0}
-              aria-label={`Start ${option.name} interview`}
+          <h1 className='mt-4 text-4xl font-extrabold leading-tight text-blue-700 md:text-5xl lg:text-6xl'>
+            Master Your Next<br className='hidden md:block' /> Interview
+          </h1>
+
+          <p className='mt-6 mx-auto max-w-2xl text-lg text-slate-600'>
+            Practice with AI interviewers, get instant feedback, and track your progress. {greeting}, {user?.displayName || 'there'} — your personal interview coach is ready 24/7.
+          </p>
+
+          <div className='mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row'>
+            <button
+              onClick={handleViewTracks}
+              className='flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white shadow-md transition hover:shadow-lg'
             >
-              <img
-                src={option.icon}
-                alt={`${option.name} icon`}
-                className='w-20 h-20 mb-4 object-cover rounded-lg group-hover:opacity-90 transition-opacity'
-                onError={(e) => {
-                  e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iOCIgZmlsbD0iIzMzOTlGRiIvPgo8dGV4dCB4PSIzMiIgeT0iMzYiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkk8L3RleHQ+Cjwvc3ZnPgo=';
-                }}
-              />
-              <h2 className='font-semibold text-lg mb-3 text-gray-800 group-hover:text-blue-600 transition-colors'>
-                {option.name}
-              </h2>
-              <button className="mt-auto px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500">
-                Start Now
-              </button>
+              <svg xmlns='http://www.w3.org/2000/svg' className='h-5 w-5' viewBox='0 0 24 24' fill='currentColor'>
+                <path d='M5 3v18l15-9L5 3z' />
+              </svg>
+              Start Free Practice
+            </button>
+
+            <button
+              onClick={handleProfileClick}
+              className='rounded-full border border-slate-200 bg-white px-6 py-3 text-slate-700 shadow-sm transition hover:shadow'
+            >
+              View Profile
+            </button>
+          </div>
+
+          <div className='mt-8 flex flex-wrap justify-center gap-3'>
+            {features.map((feature) => (
+              <span key={feature} className='rounded-full bg-blue-50/80 px-4 py-2 text-sm text-slate-700 shadow'>
+                {feature}
+              </span>
+            ))}
+          </div>
+        </header>
+
+        <main className='mt-10 w-full'>
+          <section id='interview-tracks' className='grid grid-cols-1 gap-6 md:grid-cols-2'>
+            {practiceOptions.map((option) => (
+              <UserInputDialog interviewType={option} key={option.id}>
+                <div className='group flex h-full cursor-pointer flex-col justify-between rounded-2xl bg-white p-6 shadow-md transition hover:-translate-y-1 hover:shadow-xl focus:outline-none'>
+                  <div className='flex items-start gap-4'>
+                    <div className='rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 p-3'>
+                      {renderIcon(option.iconType)}
+                    </div>
+                    <div>
+                      <h3 className='text-lg font-semibold text-slate-900'>{option.name}</h3>
+                      <p className='mt-2 text-sm text-slate-500'>{option.description}</p>
+                      <span className='mt-4 inline-block text-sm font-medium text-indigo-600'>
+                        Start Practice →
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </UserInputDialog>
+            ))}
+          </section>
+
+          <section className='mt-10 grid grid-cols-2 gap-6 md:grid-cols-4'>
+            {stats.map((stat) => (
+              <div key={stat.label} className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+                <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{stat.number}</div>
+                <div className='mt-1 text-sm text-slate-500'>{stat.label}</div>
+              </div>
+            ))}
+            <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{credits}</div>
+              <div className='mt-1 text-sm text-slate-500'>Available Credits</div>
             </div>
-          </UserInputDialog>
-        ))}
+          </section>
+        </main>
       </div>
     </div>
   )
