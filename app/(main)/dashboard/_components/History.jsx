@@ -137,10 +137,10 @@ const History = () => {
                 </p>
               </div>
 
-              <div className='mt-6 flex items-center justify-between gap-4'>
+              <div className='mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                 <button
                   onClick={() => router.push(`/dashboard/interview/${discussion.id}`)}
-                  className='flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_20px_45px_-25px_rgba(79,70,229,0.6)] transition hover:shadow-[0_25px_55px_-25px_rgba(79,70,229,0.75)]'
+                  className='flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_20px_45px_-25px_rgba(79,70,229,0.6)] transition hover:shadow-[0_25px_55px_-25px_rgba(79,70,229,0.75)] sm:w-auto sm:px-5'
                 >
                   Resume
                   <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' viewBox='0 0 24 24' fill='currentColor'>
@@ -151,7 +151,7 @@ const History = () => {
                 <Button
                   variant='outline'
                   size='sm'
-                  className='rounded-full border-indigo-300/60 bg-white/80 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-700'
+                  className='w-full rounded-full border-indigo-300/60 bg-white/80 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-700 sm:w-auto'
                   onClick={() => setSelectedDiscussion(discussion)}
                 >
                   View Feedback
