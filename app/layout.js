@@ -18,7 +18,7 @@ export const metadata = {
   title: "InterviewPrime",
   description: "AI-powered Mock Interview & English Coach Platform",
   icons: {
-    icon: '/logo.svg',
+    icon: '/logo/logo.png',
   },
 };
 
