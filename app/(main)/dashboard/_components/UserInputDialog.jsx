@@ -123,8 +123,8 @@ const UserInputDialog = ( {children, interviewType} ) => {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild onClick={() => setIsOpen(true)}>{children}</DialogTrigger>
-      <DialogContent className="w-full max-w-[90vw] sm:max-w-sm space-y-3.5 px-4 py-4">
-        <div className="rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 px-3.5 py-3 text-white shadow-md">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-sm space-y-3 px-3.5 py-3.5 sm:w-full sm:max-w-sm sm:space-y-3.5 sm:px-5 sm:py-5 max-h-[90vh] overflow-y-auto rounded-2xl">
+        <div className="rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 px-3 py-2.5 sm:px-4 sm:py-3.5 text-white shadow-md">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
             {practiceName || 'Interview'}
           </span>
@@ -139,7 +139,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-background shadow-sm">
-          <div className="border-b border-slate-200 px-3.5 py-2.5">
+          <div className="border-b border-slate-200 px-3 py-2 sm:px-3.5 sm:py-2.5">
             <DialogHeader className="space-y-0.5 text-left">
               <DialogTitle className="text-sm font-semibold text-slate-900">
                 Start {practiceName || 'Interview'} Session
@@ -152,8 +152,8 @@ const UserInputDialog = ( {children, interviewType} ) => {
             </DialogHeader>
           </div>
 
-          <div className="px-3.5 py-3 space-y-2.5">
-            <ul className="grid gap-1.5 rounded-lg bg-slate-50/70 p-2.5 text-[11px] text-slate-600">
+          <div className="px-3 py-3 space-y-2.5 sm:px-3.5">
+            <ul className="grid gap-1.5 rounded-lg bg-slate-50/70 p-2 text-[11px] text-slate-600 sm:p-2.5">
               {actionSummary.map((item) => (
                 <li key={item} className="flex items-start gap-1.5">
                   <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-blue-500" />
@@ -182,7 +182,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
                       value={role}
                       onChange={(e) => setRole(e.target.value)}
                       placeholder="e.g., Frontend Engineer"
-                      className="w-full rounded-lg border border-slate-200 bg-background p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      className="w-full rounded-lg border border-slate-200 bg-background p-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     />
                   </label>
 
@@ -192,7 +192,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
                       value={experience}
                       onChange={(e) => setExperience(e.target.value)}
                       placeholder="e.g., 3 years"
-                      className="w-full rounded-lg border border-slate-200 bg-background p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      className="w-full rounded-lg border border-slate-200 bg-background p-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     />
                   </label>
                 </div>
@@ -200,7 +200,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
             )}
 
             {!requiresDetails && (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-3.5 py-2 text-[11px] text-slate-600">
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-600">
                 You’re all set for {practiceName || 'this interview'}—hit Start Interview whenever you’re ready.
               </div>
             )}
