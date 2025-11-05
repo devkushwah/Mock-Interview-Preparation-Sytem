@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
 import { completeDiscussion, generateAndSaveFullFeedback } from '@/services/firebase/discussionService'
 
+
 // Lazy load the dialog (no SSR)
 const InterviewEndDialog = dynamic(() => import('../../_components/InterviewEndDialog'), { ssr: false })
 
@@ -212,7 +213,7 @@ const InterviewPage = () => {
   // Derived small helpers
   const getInterviewerAvatar = useCallback((interviewerName) => {
     const interviewer = Interviewer.find(i => i.name === interviewerName)
-    return interviewer?.avatar || '/images/avatar-placeholder.svg'
+    return interviewer?.avatar || '/avatars/Avatar.png'
   }, [])
 
   const handleConnect = useCallback(async () => {
@@ -297,6 +298,42 @@ const InterviewPage = () => {
     }
   }, [clearTranscript])
 
+  const connectionBadgeClasses = isConnected
+    ? 'bg-green-100 text-green-700'
+    : isConnecting
+      ? 'bg-yellow-100 text-yellow-700'
+      : 'bg-slate-100 text-slate-500';
+
+  const connectionDotClasses = isConnected
+    ? 'bg-green-500'
+    : isConnecting
+      ? 'bg-yellow-500'
+      : 'bg-slate-400';
+
+  const statusMessage = !isConnected && !isConnecting
+    ? 'Ready when you are. Tap Start Interview to join the live session.'
+    : isConnecting
+      ? 'Setting up live audio connection...'
+      : isAiProcessing
+        ? 'AI is speaking. Review the response and prepare your next answer.'
+        : 'Microphone is live. Share your response when you’re ready.';
+
+  const currentModeLabel = isAiProcessing
+    ? '🎵 AI responding'
+    : isConnected
+      ? '🎤 Listening'
+      : '🔴 Offline';
+
+  const practiceLabel =
+    typeof discussionRoomData?.practiceOption === 'string'
+      ? discussionRoomData.practiceOption
+      : discussionRoomData?.practiceOption?.label ||
+        discussionRoomData?.practiceOption?.name ||
+        'Mock Interview';
+
+  const topicLabel = discussionRoomData?.topic || 'Interview Session';
+  const hasCredits = (userData?.credit ?? 0) >= 500;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -314,154 +351,190 @@ const InterviewPage = () => {
   }
 
   return (
-    <div className='-mt-12 bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-4'>
-      <div className='max-w-7xl mx-auto'>
-        <div className='bg-white rounded-xl shadow-lg p-6 mb-6'>
-          <h2 className='text-2xl font-bold text-gray-800 flex items-center gap-2'>
-            <span className='text-blue-600'>🎤</span>
-            {discussionRoomData?.practiceOption}
-          </h2>
-          <p className='text-gray-600 mt-1'>Topic: {discussionRoomData?.topic} | Difficulty: {discussionRoomData?.difficulty}</p>
-          <p className='text-gray-600 mt-1'>Total Credits: {userData?.credit || 0}</p> {/* Display credits */}
-        </div>
-
-        <div className='grid gap-8 lg:grid-cols-3'>
-          <div className='order-2 lg:order-1 lg:col-span-1'>
-            <div className='min-h-[18rem] lg:h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center relative shadow-xl'>
-              <div className='absolute top-4 right-4'>
-                <UserButton />
-              </div>
-              <img
-                loading="lazy"
-                src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
-                alt={discussionRoomData?.interviewerName || 'Interviewer'}
-                className={`h-20 w-20 rounded-full object-cover transition-all duration-500 ${
-                  isConnected
-                    ? 'animate-pulse border-4 border-green-400 shadow-lg shadow-green-400/50'
-                    : isAiProcessing
-                      ? 'animate-pulse border-4 border-blue-400 shadow-lg shadow-blue-400/50'
-                      : 'border-2 border-gray-300'
-                }`}
-              />
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">{discussionRoomData?.interviewerName}</h2>
-
-              {isAiProcessing && (
-                <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-5 max-w-md text-center mt-6 shadow-md">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce"></div>
-                    <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                  </div>
-                  <div className="text-sm text-blue-700 font-medium">Streaming Response...</div>
-                  
-                </div>
-              )}
-
-              {isConnected && (
-                <div className="absolute top-6 left-6 flex items-center gap-2 bg-green-100 px-3 py-1 rounded-full">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-green-700 font-medium">Live Streaming</span>
-                </div>
-              )}
-
-              {isConnecting && (
-                <div className="absolute top-6 left-6 flex items-center gap-2 bg-yellow-100 px-3 py-1 rounded-full">
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full animate-spin"></div>
-                  <span className="text-sm text-yellow-700 font-medium">Connecting...</span>
-                </div>
-              )}
-
-              {transcriptionError && (
-                <div className="absolute top-6 right-6 bg-red-50 border border-red-200 rounded-lg p-3 max-w-xs shadow-md">
-                  <div className="text-xs text-red-600">{transcriptionError}</div>
-                </div>
-              )}
-            </div>
-
-            {/* Removed button container from here */}
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6 lg:py-8">
+        <header className="flex flex-col gap-4 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">
+              {practiceLabel}
+            </p>
+            <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+              {topicLabel}
+            </h1>
+            {discussionRoomData?.role && (
+              <p className="text-sm text-slate-500">
+                Target role:{' '}
+                <span className="font-medium text-slate-700">{discussionRoomData.role}</span>
+              </p>
+            )}
+            {discussionRoomData?.experience && (
+              <p className="text-sm text-slate-500">
+                Experience:{' '}
+                <span className="font-medium text-slate-700">{discussionRoomData.experience}</span>
+              </p>
+            )}
           </div>
+          <div className="flex justify-end">
+            <UserButton />
+          </div>
+        </header>
 
-          <div className='order-1 lg:order-2 lg:col-span-2'>
-            <div className='min-h-[60vh] lg:h-[65vh] bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col relative overflow-hidden shadow-xl'>
-            
-
-              {/* Conversation History */}
-              <div className="flex-1 overflow-y-auto space-y-3 mb-4 pb-2 pr-1 sm:pr-2" id="conversation-container">
-                {uiMessages.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`p-3 rounded-xl shadow-sm min-h-[2.25rem] ${
-                      message.role === 'user'
-                        ? 'bg-blue-50 border-l-4 border-blue-400 ml-1 sm:ml-4'
-                        : 'bg-green-50 border-l-4 border-green-400 mr-1 sm:mr-4'
-                    }`}
-                  >
-                    <div className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
-                      {message.role === 'user' ? '👤 You:' : '🤖 AI Interviewer:'}
-                      {message.role === 'assistant' && <span className="text-green-600">🔊</span>}
-                    </div>
-                    <div className="text-sm text-gray-700 leading-relaxed">{message.content}</div>
-                  </div>
-                ))}
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:items-start">
+          <section className="order-2 w-full lg:order-1 lg:col-span-2">
+            <div className="flex h-[70vh] flex-col rounded-2xl bg-white p-4 shadow-sm sm:h-[68vh] lg:h-[70vh]">
+              <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+                <span className={`flex items-center gap-2 rounded-full px-3 py-1 font-medium ${connectionBadgeClasses}`}>
+                  <span className={`h-2 w-2 rounded-full ${connectionDotClasses}`}></span>
+                  {currentModeLabel}
+                </span>
+                <span className="font-medium text-slate-400">Messages: {uiMessages.length}</span>
               </div>
 
-              {/* Live Status */}
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center text-xs text-gray-400 mb-2">
-                  <span className="flex items-center gap-1">
-                    {isConnected ? '🟢 Streaming TTS' : '🔴 Offline'}
-                    {isAiProcessing && <span className="text-blue-600">🎵 Playing</span>}
-                  </span>
-                  <span>Messages: {uiMessages.length}</span>
+              <div
+                id="conversation-container"
+                className="flex-1 overflow-x-hidden overflow-y-auto rounded-xl bg-slate-50 p-3 sm:p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300"
+              >
+                {uiMessages.length === 0 ? (
+                  <p className="text-center text-sm text-slate-500">
+                    Your conversation will appear here once the session begins.
+                  </p>
+                ) : (
+                  uiMessages.map((message, index) => (
+                    <div
+                      key={index}
+                      className={`mb-3 flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} last:mb-0`}
+                    >
+                      <div
+                        className={`max-w-[84%] sm:max-w-[78%] rounded-2xl px-3 py-2 text-[12px] sm:text-[13px] leading-snug shadow-sm ${
+                          message.role === 'user'
+                            ? 'bg-blue-600 text-white'
+                            : 'border border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        <div
+                          className={`mb-1 text-[9px] sm:text-[10px] font-semibold uppercase tracking-wide ${
+                            message.role === 'user' ? 'text-white/75' : 'text-slate-500'
+                          }`}
+                        >
+                          {message.role === 'user' ? 'You' : 'AI Interviewer'}
+                        </div>
+                        <div className="max-h-40 sm:max-h-56 overflow-y-auto whitespace-pre-wrap leading-snug scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300">
+                          {message.content}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-3 text-xs text-slate-500">
+                {statusMessage}
+              </div>
+            </div>
+          </section>
+
+          <aside className="order-1 w-full lg:order-2">
+            <div className="flex flex-col gap-4">
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+                  <img
+                    loading="lazy"
+                    src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
+                    alt={discussionRoomData?.interviewerName || 'Interviewer'}
+                    className={`h-16 w-16 rounded-full object-cover transition-all duration-500 ${
+                      isConnected
+                        ? 'ring-2 ring-green-400'
+                        : isConnecting
+                          ? 'ring-2 ring-yellow-300'
+                          : 'ring-1 ring-slate-200'
+                    }`}
+                  />
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">
+                      {discussionRoomData?.interviewerName || 'AI Interviewer'}
+                    </p>
+                    <p className="text-sm text-slate-500">{practiceLabel}</p>
+                  </div>
                 </div>
 
-                {isConnected && (
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                    <div className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-150 animate-pulse"
-                         style={{width: isAiProcessing ? '100%' : '70%'}}></div>
+                <dl className="mt-4 space-y-2 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="font-medium text-slate-700">Difficulty</dt>
+                    <dd className="text-right capitalize">{discussionRoomData?.difficulty || 'Balanced'}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="font-medium text-slate-700">Practice Option</dt>
+                    <dd className="text-right">{practiceLabel}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="font-medium text-slate-700">Session ID</dt>
+                    <dd className="text-right text-xs text-slate-400">{discussionRoomData?.id || id}</dd>
+                  </div>
+                </dl>
+
+                {isAiProcessing && (
+                  <div className="mt-4 rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-600">
+                    Streaming response in progress...
                   </div>
                 )}
 
-                <div className="text-xs text-gray-600 p-3 bg-gray-50 rounded-lg">
-                  {!isConnected && !isConnecting && <span className="text-gray-400">Ready for streaming interview...</span>}
-                  {isConnecting && <span className="text-yellow-600">🔌 Connecting to streaming TTS...</span>}
-                  {isConnected && !isAiProcessing && <span className="text-green-600">🎤 Listening... Speak to hear AI response!</span>}
-                  {isConnected && isAiProcessing && <span className="text-blue-600">🎵 AI responding with streaming audio...</span>}
+                {transcriptionError && (
+                  <div className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+                    {transcriptionError}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  {isConnected ? (
+                    <Button
+                      variant="destructive"
+                      onClick={handleEndInterview}
+                      disabled={isEndingInterview}
+                      className="w-full py-3 sm:flex-1"
+                    >
+                      {isEndingInterview ? 'Ending...' : 'End Interview'}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleConnect}
+                      disabled={isConnecting || !discussionRoomData || isEndingInterview || !hasCredits}
+                      className="w-full bg-blue-600 py-3 text-white hover:bg-blue-700 sm:flex-1"
+                    >
+                      {isConnecting ? 'Connecting...' : hasCredits ? 'Start Interview' : 'Insufficient Credits'}
+                    </Button>
+                  )}
+
+                  {(transcript || uiMessages.length > 0) && (
+                    <Button
+                      variant="outline"
+                      onClick={handleClearSession}
+                      disabled={isEndingInterview}
+                      className="w-full py-3 sm:flex-none sm:px-6"
+                    >
+                      Clear Session
+                    </Button>
+                  )}
                 </div>
+
+                <p className="mt-3 text-xs text-slate-500">{currentModeLabel}</p>
+                {!hasCredits && (
+                  <p className="mt-2 text-xs font-medium text-red-500">
+                    You need at least 500 credits to start a live interview.
+                  </p>
+                )}
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Moved button container here, below the grid, centered across full width */}
-        <div className="mt-6 flex items-center justify-center gap-4">
-          {isConnected ? (
-            <Button variant="destructive" onClick={handleEndInterview} disabled={isEndingInterview} className="px-6 py-3 text-lg">
-              End Interview
-            </Button>
-          ) : (
-            <Button
-              onClick={handleConnect}
-              disabled={isConnecting || !discussionRoomData || isEndingInterview || (userData?.credit < 500)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg shadow-lg"
-            >
-              {isConnecting ? 'Connecting...' : (userData?.credit < 500 ? 'Insufficient Credits' : 'Start Interview')}
-            </Button>
-          )}
-
-          {(transcript || uiMessages.length > 0) && (
-            <Button variant="outline" onClick={handleClearSession} disabled={isEndingInterview} className="px-6 py-3">
-              Clear Session
-            </Button>
-          )}
+          </aside>
         </div>
       </div>
 
       {isEndingInterview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="flex flex-col items-center gap-2 bg-white p-6 rounded-lg shadow-lg">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm text-gray-600">Just wait a few seconds, your feedback is being generated...</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 rounded-lg bg-white p-6 shadow-lg">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+            <p className="text-sm text-slate-600">Just wait a few seconds, your feedback is being generated...</p>
           </div>
         </div>
       )}
@@ -471,7 +544,7 @@ const InterviewPage = () => {
           discussionRoomId={id}
           onClose={() => {
             setShowEndDialog(false)
-            router.replace('/dashboard')  // Immediate navigation without delay
+            router.replace('/dashboard')
           }}
         />
       )}
