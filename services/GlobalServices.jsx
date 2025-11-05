@@ -13,12 +13,23 @@ const openai = new OpenAI({
 const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await fn();
+      return await fn()
     } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      const delay = baseDelay * Math.pow(2, i);
-      console.log(`Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const status =
+        error?.status ??
+        error?.statusCode ??
+        error?.response?.status ??
+        error?.cause?.response?.status
+
+      if (status === 429) {
+        error.rateLimit = true
+        throw error
+      }
+
+      if (i === maxRetries - 1) throw error
+
+      const delay = baseDelay * Math.pow(2, i) + Math.random() * 100
+      await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
 };
@@ -91,9 +102,18 @@ export const AIModel = async (topicOrContext, expertType, msg) => {
     };
     
   } catch (error) {
-    console.error('❌ AIModel Error:', error);
-    
-    console.log('🔄 Falling back to Gemini...');
+    const isRateLimited =
+      error?.rateLimit ||
+      error?.status === 429 ||
+      error?.statusCode === 429 ||
+      error?.response?.status === 429
+
+    if (isRateLimited) {
+      console.warn('⚠️ OpenRouter rate limit hit; switching to Gemini fallback once.')
+    } else {
+      console.error('❌ AIModel Error:', error)
+    }
+
     try {
       if (!resolvedPrompt && promptTemplate) {
         resolvedPrompt = promptTemplate
