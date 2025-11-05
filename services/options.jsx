@@ -58,19 +58,19 @@ Keep feedback actionable yet succinct. If key context is missing, request it upf
 export const Interviewer = [
   {
     name: "Sarah Johnson",
-    avatar: "/avatars/avatar1.jpg",
+    avatar: "/avatars/Avatar.png",
     expertise: "Technical Interviews",
     description: "Senior Software Engineer with 8+ years experience"
   },
   {
     name: "Michael Chen", 
-    avatar: "/avatars/avatar2.jpg",
+    avatar: "/avatars/Avatar.png",
     expertise: "Behavioral Interviews",
     description: "HR Manager specializing in candidate assessment"
   },
   {
     name: "Emily Davis",
-    avatar: "/avatars/avatar3.jpg",
+    avatar: "/avatars/Avatar.png",
     expertise: "System Design",
     description: "Principal Architect with expertise in scalable systems"
   },
