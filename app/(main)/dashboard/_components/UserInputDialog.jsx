@@ -172,6 +172,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
                     placeholder="e.g., System design for real-time analytics platforms"
                     className="w-full resize-none rounded-lg border border-slate-200 bg-background p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     rows={2}
+                    required
                   />
                 </label>
 
@@ -183,6 +184,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
                       onChange={(e) => setRole(e.target.value)}
                       placeholder="e.g., Frontend Engineer"
                       className="w-full rounded-lg border border-slate-200 bg-background p-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      required
                     />
                   </label>
 
@@ -193,6 +195,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
                       onChange={(e) => setExperience(e.target.value)}
                       placeholder="e.g., 3 years"
                       className="w-full rounded-lg border border-slate-200 bg-background p-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      required
                     />
                   </label>
                 </div>
