@@ -10,12 +10,9 @@ export default function Dashboard() {
   const { userData } = useContext(UserContext)
 
   return (
-    <div className='space-y-12'>
+    <div className='min-h-screen bg-slate-50'>
       <PracticePartner credits={userData?.credit || 0} />
-
-      <section className='grid grid-cols-1 gap-10'>
-        <History />
-      </section>
+      <History />
     </div>
   )
 }

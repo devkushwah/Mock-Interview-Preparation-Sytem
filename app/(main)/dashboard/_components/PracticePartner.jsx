@@ -113,13 +113,15 @@ const PracticePartner = ({ credits = 0 }) => {
 
   if (isLoading) {
     return (
-      <div className='min-h-[320px] animate-pulse rounded-3xl bg-gradient-to-br from-white via-sky-50 to-white' />
+      <section className='relative left-1/2 right-1/2 w-screen -translate-x-1/2 bg-gradient-to-br from-white via-sky-50 to-white py-16'>
+        <div className='mx-auto h-64 w-full max-w-6xl animate-pulse rounded-3xl bg-white/60' />
+      </section>
     )
   }
 
   return (
-    <div className='min-h-screen w-full bg-gradient-to-br from-white via-sky-50 to-white py-12 px-4 sm:px-6 lg:px-8'>
-      <div className='mx-auto flex w-full max-w-6xl flex-col items-center'>
+    <section className='relative left-1/2 right-1/2 w-screen -translate-x-1/2 bg-gradient-to-br from-white via-sky-50 to-white py-12'>
+      <div className='mx-auto flex w-full max-w-6xl flex-col items-center px-4 sm:px-6 lg:px-8'>
         <header className='w-full text-center'>
           <div className='mx-auto inline-flex items-center gap-2 rounded-full bg-blue-100/70 px-3 py-1 text-sm font-medium text-blue-700'>
             <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
@@ -200,7 +202,7 @@ const PracticePartner = ({ credits = 0 }) => {
           </section>
         </main>
       </div>
-    </div>
+    </section>
   )
 }
 

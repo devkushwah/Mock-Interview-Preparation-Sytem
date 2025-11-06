@@ -4,12 +4,19 @@ import { UserButton } from '@stackframe/stack'
 
 const AppHeader = () => {
   return (
-    <div className='flex items-center justify-between gap-4 p-5 shadow-sm'>
+    <header className='flex items-center justify-between gap-4 bg-gradient-to-br from-white via-sky-50 to-white px-5 py-4 text-slate-900 shadow-sm'>
       <div className='ml-2 sm:ml-4'>
-        <Image src="/logo/logo.png" alt="Logo" width={80} height={56} priority />
+        <Image
+          src="/logo/logo.png"
+          alt="Logo"
+          width={44}
+          height={32}
+          priority
+          className='h-8 w-auto sm:h-9'
+        />
       </div>
       <UserButton />
-    </div>
+    </header>
   )
 }
 
