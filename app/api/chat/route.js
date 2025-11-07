@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebaseConfig'
-import { doc, updateDoc, serverTimestamp, collection, addDoc, getDoc } from 'firebase/firestore'
+import {
+  collection, addDoc, serverTimestamp, updateDoc, doc, getDoc
+} from 'firebase/firestore'
+import { callGemini } from '@/services/geminiService'
 import { AIModel } from '@/services/GlobalServices'
-import { callGemini } from '@/services/geminiService'  // add
 
 // Save message to subcollection: /discussionRooms/{roomId}/messages
 const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {
   const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
-  const messageObj = { sender, message, timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
+  const messageObj = {
+    sender,
+    message,
+    type: 'text',
+    timestamp: serverTimestamp(),              // USE Firestore Timestamp
+    timestampText: new Date().toISOString(),   // optional human-readable
+  }
   await addDoc(messagesRef, messageObj)
   // Update room's updatedAt
   const roomRef = doc(db, 'discussionRooms', discussionRoomId)
@@ -32,65 +40,32 @@ const checkRateLimit = (userId) => {
 }
 
 export async function POST(request) {
-  console.log('🤖 Chat API route hit!')
-  
   try {
     const body = await request.json()
-    console.log('🤖 Chat API request body:', {
-      hasMessage: !!body.message,
-      hasContext: !!body.context,
-      hasDiscussionRoomId: !!body.discussionRoomId,
-      discussionRoomId: body.discussionRoomId
-    })
-    
     const { message, context, discussionRoomId, userId } = body
+
+    if (!message?.trim()) {
+      return NextResponse.json({ error: 'Message required' }, { status: 400 })
+    }
 
     // Fetch room to get tier and free flag
     let roomTier = 'regular'
     let isFreeSession = false
     if (discussionRoomId) {
-      try {
-        const snap = await getDoc(doc(db, 'discussionRooms', discussionRoomId))
-        if (snap.exists()) {
-          const data = snap.data()
-          roomTier = data?.tier || 'regular'
-          isFreeSession = !!data?.isFreeSession
-        }
-      } catch (e) {
-        console.warn('⚠️ failed to get room for tier:', e?.message)
+      const snap = await getDoc(doc(db, 'discussionRooms', discussionRoomId))
+      if (snap.exists()) {
+        const data = snap.data()
+        roomTier = (data?.tier || 'regular').toLowerCase()
+        isFreeSession = !!data?.isFreeSession
       }
     }
 
-    // Rate limiting
-    if (userId && !checkRateLimit(userId)) {
-      return NextResponse.json({ error: 'Rate limit exceeded. Please wait.' }, { status: 429 })
-    }
+    // Optional: basic rate limit (skip if missing userId)
+    // if (userId && !checkRateLimit(userId)) { return NextResponse.json({ error: 'Rate limit' }, { status: 429 }) }
 
-    // Per-message credit deduction (skip for free session)
-    if (userId && !isFreeSession) {
-      try {
-        const { deductCredits } = await import('@/services/firebase/userService');
-        await deductCredits(userId, 500); // 500 credits per message
-      } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-    }
-
-    if (!message) {
-      console.error('❌ No message provided')
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 })
-    }
-
-    // Save user message to subcollection
+    // Save user message
     if (discussionRoomId) {
-      try {
-        await saveMessageToDiscussionRoom(discussionRoomId, 'user', message)
-        console.log('✅ User message saved to subcollection')
-      } catch (error) {
-        console.error('❌ Failed to save user message:', error)
-      }
-    } else {
-      console.warn('⚠️ No discussionRoomId - skipping save')
+      await saveMessageToDiscussionRoom(discussionRoomId, 'user', message)
     }
 
     const interviewerName = context?.interviewerName || 'an experienced interviewer'
@@ -113,60 +88,33 @@ Candidate just said: "${message}"
 
 Respond naturally as an interviewer speaking out loud:`
 
-    // Route by tier:
+    // Strict routing by tier
     let result
     if (roomTier === 'regular') {
-      // Prefer Gemini
       const geminiText = await callGemini(conversationPrompt)
-      if (geminiText) {
-        result = { success: true, response: geminiText }
-      } else {
-        // Fallback to OpenRouter
-        result = await AIModel(
-          context?.topic || 'general interview conversation',
-          practiceOption,
-          conversationPrompt,
-          'qwen/qwen-2.5-72b-instruct:free'
-        )
+      if (!geminiText) {
+        return NextResponse.json({ error: 'Service busy, try again.' }, { status: 503 })
       }
+      result = { success: true, response: geminiText }
     } else {
-      // Pro → Qwen
+      // Pro => force Qwen
       result = await AIModel(
-        context?.topic || 'general interview conversation',
+        { topic: context?.topic, role: null, experience: null, tier: 'pro' },
         practiceOption,
         conversationPrompt,
         'qwen/qwen-2.5-72b-instruct:free'
       )
     }
 
-    if (result?.success) {
-      let aiResponse = result.response.trim()
-      aiResponse = aiResponse
-        .replace(/###\s*/g, '')
-        .replace(/\*\*/g, '')
-        .replace(/\*/g, '')
-        .replace(/\[.*?\]/g, '')
-        .replace(/\n+/g, ' ')
-        .trim()
+    const aiText = result?.success ? result.response : "Sorry, I'm having trouble responding right now."
 
-      // Save AI response to subcollection
-      if (discussionRoomId) {
-        try {
-          await saveMessageToDiscussionRoom(discussionRoomId, 'ai', aiResponse)
-          console.log('✅ AI message saved to subcollection')
-        } catch (error) {
-          console.error('❌ Failed to save AI response:', error)
-        }
-      }
-      
-      return NextResponse.json({ response: aiResponse })
-    } else {
-      console.error('❌ AI response failed:', result?.error)
-      return NextResponse.json({ error: result?.error || 'Failed to generate response' }, { status: 500 })
+    if (discussionRoomId) {
+      await saveMessageToDiscussionRoom(discussionRoomId, 'assistant', aiText)
     }
-    
+
+    return NextResponse.json({ success: true, response: aiText })
   } catch (error) {
     console.error('❌ Chat API Error:', error)
-    return NextResponse.json({ error: 'Failed to generate response. Please try again.' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

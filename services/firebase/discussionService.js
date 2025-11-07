@@ -271,6 +271,13 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
       await deductCredits(userId, 2000)
     }
 
+    // Fetch room to get tier/role/experience for model routing
+    const roomSnap = await getDoc(doc(db, 'discussionRooms', discussionRoomId))
+    const room = roomSnap.exists() ? roomSnap.data() : {}
+    const tier = (room?.tier || 'regular').toLowerCase()
+    const role = room?.role || room?.jobRole || null
+    const experience = room?.experience || null
+
     const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
     const snapshot = await getDocs(query(messagesRef, orderBy('timestamp', 'asc')))
     const messages = snapshot.docs.map(doc => doc.data())
@@ -294,7 +301,9 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
     const fullPrompt =
       `Provide feedback as a JSON array of objects, each with "point", "feedback", and "strength" (boolean). Output only the JSON array, nothing else.\n\n${feedbackPrompt}\n\nFull Conversation:\n${conversationSummary}`
 
-    const result = await AIModel(topic, practiceOption, fullPrompt)
+    // Pass tier to AIModel so it routes correctly
+    const contextForModel = { topic, role, experience, tier }
+    const result = await AIModel(contextForModel, practiceOption, fullPrompt)
     let feedbackArray
 
     if (result.success) {
@@ -316,26 +325,13 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
         }))
       }
     } else {
-      try {
-        const geminiResponse = await callGemini(fullPrompt)
-        if (!geminiResponse) throw new Error('Gemini fallback failed')
-
-        let cleanedGeminiResponse = geminiResponse
-          .replace(/```json\s*/g, '')
-          .replace(/\s*```/g, '')
-          .trim()
-        if (!cleanedGeminiResponse.startsWith('[')) throw new Error('Gemini response does not start with array')
-        feedbackArray = JSON.parse(cleanedGeminiResponse)
-        if (!Array.isArray(feedbackArray)) throw new Error('Gemini did not return array')
-      } catch (geminiError) {
-        console.error('❌ Gemini fallback failed for feedback:', geminiError)
-        const lines = (geminiError.message || '').split('\n').filter(line => line.trim().length > 0)
-        feedbackArray = lines.map((line, index) => ({
-          point: `Feedback Point ${index + 1}`,
-          feedback: line.replace(/^- /, '').trim(),
-          strength: false
-        }))
-      }
+      // As AIModel already tried Gemini when needed, just surface a minimal fallback
+      const lines = (result.error || '').split('\n').filter(line => line.trim().length > 0)
+      feedbackArray = lines.length ? lines.map((line, i) => ({
+        point: `Feedback Point ${i + 1}`,
+        feedback: line,
+        strength: false
+      })) : []
     }
 
     const roomRef = doc(db, 'discussionRooms', discussionRoomId)

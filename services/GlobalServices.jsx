@@ -38,13 +38,16 @@ export const AIModel = async (topicOrContext, expertType, msg, modelOverride) =>
   let topic = '';
   let role = null;
   let experience = null;
+  let tier = null; // regular | pro
 
   if (topicOrContext && typeof topicOrContext === 'object') {
     topic = topicOrContext.topic || '';
     role = topicOrContext.role || null;
     experience = topicOrContext.experience || null;
+    tier = (topicOrContext.tier || topicOrContext.plan || topicOrContext?.discussion?.tier || 'regular').toLowerCase();
   } else {
     topic = topicOrContext || '';
+    tier = 'regular';
   }
 
   let option;
@@ -52,92 +55,83 @@ export const AIModel = async (topicOrContext, expertType, msg, modelOverride) =>
   let resolvedPrompt = '';
 
   try {
-    console.log('🤖 AIModel called with:', { topic, role, experience, expertType, msg });
-    
+    console.log('🤖 AIModel called with:', { topic, role, experience, expertType, msg, tier });
+
     const expertsArray = Array.isArray(ExpertsList) ? ExpertsList : [];
     if (expertsArray.length === 0) {
       throw new Error('ExpertsList is empty or not properly imported');
     }
-    
+
     option = expertsArray.find((item) => item?.name === expertType) || expertsArray[0];
     if (!option) {
       throw new Error(`Expert not found: ${expertType}`);
     }
-    
+
     if (!option.prompt) {
       throw new Error(`Expert "${option.name}" does not have a prompt property`);
     }
-    
-    console.log('✅ Selected expert:', option.name);
-    
+
     promptTemplate = option.prompt || '';
     resolvedPrompt = promptTemplate
       .replace(/{user_topic}/gi, topic || 'general interview topics')
       .replace(/{user_role}/gi, role || 'the target role')
       .replace(/{user_experience}/gi, experience || 'the candidate\'s experience level');
-    
-    const model = modelOverride || option.model || "qwen/qwen-2.5-72b-instruct:free";
-    
+
+    const combinedPrompt = `${resolvedPrompt}\n\nUser message: ${msg}`;
+
+    // Force model by tier:
+    // - regular => Gemini only
+    // - pro => Qwen via OpenRouter (fallback Gemini on failure)
+    if (tier !== 'pro') {
+      const geminiResponse = await callGemini(combinedPrompt);
+      if (!geminiResponse) throw new Error('Gemini returned empty response');
+      return { success: true, response: geminiResponse };
+    }
+
+    // Pro plan -> Always Qwen (ignore option.model to enforce policy)
+    const model = modelOverride || "qwen/qwen-2.5-72b-instruct:free";
     const completion = await retryWithBackoff(async () => {
       return await openai.chat.completions.create({
-        model: model,
+        model,
         messages: [
-          {
-            role: "system",
-            content: resolvedPrompt,
-          },
-          {
-            role: "user", 
-            content: msg,
-          },
+          { role: "system", content: resolvedPrompt },
+          { role: "user", content: msg },
         ],
       });
     });
-    
-    console.log('✅ AI Response received:', completion.choices[0].message);
-    
+
     return {
       success: true,
       response: completion.choices[0].message.content
     };
-    
+
   } catch (error) {
     const isRateLimited =
       error?.rateLimit ||
       error?.status === 429 ||
       error?.statusCode === 429 ||
-      error?.response?.status === 429
+      error?.response?.status === 429;
 
     if (isRateLimited) {
-      console.warn('⚠️ OpenRouter rate limit hit; switching to Gemini fallback once.')
+      console.warn('⚠️ OpenRouter rate limit; trying Gemini fallback.')
     } else {
       console.error('❌ AIModel Error:', error)
     }
 
+    // Fallback: try Gemini once (keeps regular=Gemini rule; also helps pro on failure)
     try {
-      if (!resolvedPrompt && promptTemplate) {
-        resolvedPrompt = promptTemplate
-          .replace(/{user_topic}/gi, topic || 'general interview topics')
-          .replace(/{user_role}/gi, role || 'the target role')
-          .replace(/{user_experience}/gi, experience || 'the candidate\'s experience level');
-      }
-      const geminiPrompt = `${resolvedPrompt}\n\nUser message: ${msg}`;
-      const geminiResponse = await callGemini(geminiPrompt);
+      const fallbackPrompt = `${resolvedPrompt || ''}\n\nUser message: ${msg}`;
+      const geminiResponse = await callGemini(fallbackPrompt);
       if (geminiResponse) {
-        console.log('✅ Gemini fallback success');
-        return {
-          success: true,
-          response: geminiResponse
-        };
-      } else {
-        throw new Error('Gemini fallback failed');
+        return { success: true, response: geminiResponse };
       }
+      throw new Error('Gemini fallback failed');
     } catch (geminiError) {
       console.error('❌ Gemini fallback failed:', geminiError);
       return {
         success: false,
-        error: 'Both OpenRouter and Gemini failed',
-        response: "I'm sorry, I'm having trouble responding right now. Please try again."
+        error: 'Both model calls failed',
+        response: "I'm having trouble responding right now. Please try again."
       };
     }
   }

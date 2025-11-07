@@ -162,9 +162,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: completeTranscript,
           context: {
@@ -172,7 +170,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
             practiceOption: discussionRoomData?.practiceOption,
             interviewerName: discussionRoomData?.interviewerName,
           },
-          discussionRoomId: discussionRoomData?.id // <-- ADD THIS LINE
+          discussionRoomId: discussionRoomData?.id,
+          userId: discussionRoomData?.userId // ensure rate limiting/credits work
         }),
       })
 
@@ -415,7 +414,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         body: JSON.stringify({
           message: finalTranscript,
           context: interviewContext,
-          discussionRoomId: discussionRoomData.id // Make sure this is included
+          discussionRoomId: discussionRoomData.id,
+          userId: discussionRoomData?.userId // include userId here too
         })
       })
       
