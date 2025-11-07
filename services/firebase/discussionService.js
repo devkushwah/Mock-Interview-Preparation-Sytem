@@ -1,9 +1,12 @@
 import { db } from '@/lib/firebaseConfig'
 import {
   collection, addDoc, getDoc, getDocs, doc, updateDoc,
-  query, where, orderBy, startAfter, limit, serverTimestamp
+  query, where, orderBy, startAfter, limit, serverTimestamp, increment
 } from 'firebase/firestore'
-import { ensureHasCredits, checkAndConsumeDailyFreeInterview } from './userService'
+import { ensureHasCredits, checkAndConsumeDailyFreeInterview } from './userService' // removed static updateUserStats import
+import { ExpertsList } from '@/services/options' // use alias to avoid resolution issues
+import { AIModel } from '@/services/GlobalServices' // use the real AIModel
+import { callGemini } from '@/services/geminiService' // import Gemini fallback
 
 /** ---------------- Helper Functions ---------------- **/
 
@@ -219,9 +222,18 @@ export const completeDiscussion = async (discussionId, { feedback = null, score 
       updatedAt: serverTimestamp()
     })
 
-    // Update user stats if userId provided
+    // Dynamically import updateUserStats to avoid ReferenceError if not exported
     if (userId) {
-      await updateUserStats(userId, { totalInterviews: 1 })
+      try {
+        const { updateUserStats } = await import('./userService')
+        if (typeof updateUserStats === 'function') {
+          await updateUserStats(userId, { totalInterviews: increment(1) })
+        } else {
+          console.warn('updateUserStats not defined or not a function')
+        }
+      } catch (e) {
+        console.warn('updateUserStats unavailable:', e?.message)
+      }
     }
 
     return { success: true }
@@ -256,89 +268,88 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
     // Credit check and deduction for feedback
     if (userId) {
       const { deductCredits } = await import('./userService')
-      await deductCredits(userId, 2000) // Deduct 2000 credits per feedback generation
+      await deductCredits(userId, 2000)
     }
 
     const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
     const snapshot = await getDocs(query(messagesRef, orderBy('timestamp', 'asc')))
     const messages = snapshot.docs.map(doc => doc.data())
-
     if (messages.length === 0) throw new Error('No conversation found for feedback')
 
     const conversationSummary = messages
       .map(msg => `${msg.sender === 'user' ? 'Candidate' : 'Interviewer'}: ${msg.message}`)
       .join('\n')
 
-    const expert = ExpertsList.find(opt => opt.name === practiceOption) || ExpertsList[0]
+    // Safeguard: if ExpertsList is undefined, load it dynamically
+    const expertsList =
+      (Array.isArray(ExpertsList) && ExpertsList.length > 0)
+        ? ExpertsList
+        : (await import('@/services/options')).ExpertsList || []
+
+    const expert = expertsList.find(opt => opt.name === practiceOption) || expertsList[0]
     if (!expert || !expert.feedbackPrompt) throw new Error('No feedbackPrompt found')
 
     const feedbackPrompt = expert.feedbackPrompt.replace('{user_topic}', topic || 'general topics')
 
-    // Reorder prompt: instruction first, then conversation
-    const fullPrompt = `Provide feedback as a JSON array of objects, each with "point", "feedback", and "strength" (boolean). Output only the JSON array, nothing else.\n\n${feedbackPrompt}\n\nFull Conversation:\n${conversationSummary}`
+    const fullPrompt =
+      `Provide feedback as a JSON array of objects, each with "point", "feedback", and "strength" (boolean). Output only the JSON array, nothing else.\n\n${feedbackPrompt}\n\nFull Conversation:\n${conversationSummary}`
 
     const result = await AIModel(topic, practiceOption, fullPrompt)
     let feedbackArray
 
     if (result.success) {
       try {
-        // Clean the response to remove any potential markdown or extra text
-        let cleanedResponse = result.response.replace(/```json\s*/g, '').replace(/\s*```/g, '').replace(/^\s*[\[\{]/, '[').replace(/[\]\}]\s*$/, ']').trim();
-        // Ensure it's valid JSON by checking for array start
-        if (!cleanedResponse.startsWith('[')) {
-          throw new Error('Response does not start with array');
-        }
-        feedbackArray = JSON.parse(cleanedResponse);
-        if (!Array.isArray(feedbackArray)) throw new Error('AI did not return array');
+        let cleanedResponse = result.response
+          .replace(/```json\s*/g, '')
+          .replace(/\s*```/g, '')
+          .trim()
+        if (!cleanedResponse.startsWith('[')) throw new Error('Response does not start with array')
+        feedbackArray = JSON.parse(cleanedResponse)
+        if (!Array.isArray(feedbackArray)) throw new Error('AI did not return array')
       } catch (e) {
-        console.error('JSON parse failed, using fallback parsing:', e);
-        // Improved fallback: try to extract JSON-like content or split into points
-        const lines = result.response.split('\n').filter(line => line.trim().length > 0);
+        console.error('JSON parse failed, using fallback parsing:', e)
+        const lines = result.response.split('\n').filter(line => line.trim().length > 0)
         feedbackArray = lines.map((line, index) => ({
           point: `Feedback Point ${index + 1}`,
           feedback: line.replace(/^- /, '').trim(),
-          strength: line.toLowerCase().includes('good') || line.toLowerCase().includes('strength') // Basic heuristic
-        }));
+          strength: /good|strength/i.test(line)
+        }))
       }
     } else {
-      // Fallback to Gemini if AIModel fails
-      console.log('🔄 Falling back to Gemini for feedback...');
       try {
-        const geminiResponse = await callGemini(fullPrompt);
-        if (geminiResponse) {
-          let cleanedGeminiResponse = geminiResponse.replace(/```json\s*/g, '').replace(/\s*```/g, '').replace(/^\s*[\[\{]/, '[').replace(/[\]\}]\s*$/, ']').trim();
-          if (!cleanedGeminiResponse.startsWith('[')) {
-            throw new Error('Gemini response does not start with array');
-          }
-          feedbackArray = JSON.parse(cleanedGeminiResponse);
-          if (!Array.isArray(feedbackArray)) throw new Error('Gemini did not return array');
-        } else {
-          throw new Error('Gemini fallback failed');
-        }
+        const geminiResponse = await callGemini(fullPrompt)
+        if (!geminiResponse) throw new Error('Gemini fallback failed')
+
+        let cleanedGeminiResponse = geminiResponse
+          .replace(/```json\s*/g, '')
+          .replace(/\s*```/g, '')
+          .trim()
+        if (!cleanedGeminiResponse.startsWith('[')) throw new Error('Gemini response does not start with array')
+        feedbackArray = JSON.parse(cleanedGeminiResponse)
+        if (!Array.isArray(feedbackArray)) throw new Error('Gemini did not return array')
       } catch (geminiError) {
-        console.error('❌ Gemini fallback failed for feedback:', geminiError);
-        // Fallback parsing for Gemini
-        const lines = geminiError.message.split('\n').filter(line => line.trim().length > 0);
+        console.error('❌ Gemini fallback failed for feedback:', geminiError)
+        const lines = (geminiError.message || '').split('\n').filter(line => line.trim().length > 0)
         feedbackArray = lines.map((line, index) => ({
           point: `Feedback Point ${index + 1}`,
           feedback: line.replace(/^- /, '').trim(),
           strength: false
-        }));
+        }))
       }
     }
 
-    const roomRef = doc(db, 'discussionRooms', discussionRoomId);
+    const roomRef = doc(db, 'discussionRooms', discussionRoomId)
     await updateDoc(roomRef, {
       feedback: feedbackArray,
       updatedAt: serverTimestamp()
-    });
+    })
 
-    return { success: true, feedback: feedbackArray };
+    return { success: true, feedback: feedbackArray }
   } catch (error) {
-    console.error('❌ Full feedback generation error:', error);
-    return { success: false, error: error.message };
+    console.error('❌ Full feedback generation error:', error)
+    return { success: false, error: error.message }
   }
-};
+}
 
 /** ---------------- Export ---------------- **/
 export default {
