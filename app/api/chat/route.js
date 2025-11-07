@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebaseConfig'
-import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore'
+import { doc, updateDoc, serverTimestamp, collection, addDoc, getDoc } from 'firebase/firestore'
 import { AIModel } from '@/services/GlobalServices'
+import { callGemini } from '@/services/geminiService'  // add
 
 // Save message to subcollection: /discussionRooms/{roomId}/messages
 const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {
@@ -42,30 +43,44 @@ export async function POST(request) {
       discussionRoomId: body.discussionRoomId
     })
     
-    const { message, context, discussionRoomId, userId } = body // Assume userId from auth
-    
+    const { message, context, discussionRoomId, userId } = body
+
+    // Fetch room to get tier and free flag
+    let roomTier = 'regular'
+    let isFreeSession = false
+    if (discussionRoomId) {
+      try {
+        const snap = await getDoc(doc(db, 'discussionRooms', discussionRoomId))
+        if (snap.exists()) {
+          const data = snap.data()
+          roomTier = data?.tier || 'regular'
+          isFreeSession = !!data?.isFreeSession
+        }
+      } catch (e) {
+        console.warn('⚠️ failed to get room for tier:', e?.message)
+      }
+    }
+
     // Rate limiting
     if (userId && !checkRateLimit(userId)) {
       return NextResponse.json({ error: 'Rate limit exceeded. Please wait.' }, { status: 429 })
     }
 
-    // Credit check and deduction for message
-    if (userId) {
+    // Per-message credit deduction (skip for free session)
+    if (userId && !isFreeSession) {
       try {
         const { deductCredits } = await import('@/services/firebase/userService');
-        await deductCredits(userId, 500); // Deduct 500 credits per message
+        await deductCredits(userId, 500); // 500 credits per message
       } catch (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
     }
-    
+
     if (!message) {
       console.error('❌ No message provided')
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
 
-    console.log('🤖 Processing message:', message.substring(0, 50) + '...')
-    
     // Save user message to subcollection
     if (discussionRoomId) {
       try {
@@ -78,10 +93,9 @@ export async function POST(request) {
       console.warn('⚠️ No discussionRoomId - skipping save')
     }
 
-    // Generate AI response (already server-side)
     const interviewerName = context?.interviewerName || 'an experienced interviewer'
     const practiceOption = context?.practiceOption || 'Mock Interview'
-    
+
     const conversationPrompt = `You are ${interviewerName} conducting a ${practiceOption} session.
 
 CRITICAL VOICE CONVERSATION RULES:
@@ -93,25 +107,40 @@ CRITICAL VOICE CONVERSATION RULES:
 - Wait for candidate's response before next question
 
 Interview Context:
-- Candidate: BTech Computer Science student
-- Projects: LMS and AI-powered mock interview system
 - Type: ${practiceOption}
 
 Candidate just said: "${message}"
 
 Respond naturally as an interviewer speaking out loud:`
 
-    console.log('🤖 Calling AIModel...', typeof AIModel)
-    const result = await AIModel(
-      context?.topic || 'general interview conversation',
-      practiceOption,
-      conversationPrompt
-    )
-    
-    if (result.success) {
+    // Route by tier:
+    let result
+    if (roomTier === 'regular') {
+      // Prefer Gemini
+      const geminiText = await callGemini(conversationPrompt)
+      if (geminiText) {
+        result = { success: true, response: geminiText }
+      } else {
+        // Fallback to OpenRouter
+        result = await AIModel(
+          context?.topic || 'general interview conversation',
+          practiceOption,
+          conversationPrompt,
+          'qwen/qwen-2.5-72b-instruct:free'
+        )
+      }
+    } else {
+      // Pro → Qwen
+      result = await AIModel(
+        context?.topic || 'general interview conversation',
+        practiceOption,
+        conversationPrompt,
+        'qwen/qwen-2.5-72b-instruct:free'
+      )
+    }
+
+    if (result?.success) {
       let aiResponse = result.response.trim()
-      
-      // Clean formatting
       aiResponse = aiResponse
         .replace(/###\s*/g, '')
         .replace(/\*\*/g, '')
@@ -119,9 +148,7 @@ Respond naturally as an interviewer speaking out loud:`
         .replace(/\[.*?\]/g, '')
         .replace(/\n+/g, ' ')
         .trim()
-      
-      console.log('✅ AI response generated:', aiResponse.substring(0, 100) + '...')
-      
+
       // Save AI response to subcollection
       if (discussionRoomId) {
         try {
@@ -134,8 +161,8 @@ Respond naturally as an interviewer speaking out loud:`
       
       return NextResponse.json({ response: aiResponse })
     } else {
-      console.error('❌ AI response failed:', result.error)
-      return NextResponse.json({ error: result.error || 'Failed to generate response' }, { status: 500 })
+      console.error('❌ AI response failed:', result?.error)
+      return NextResponse.json({ error: result?.error || 'Failed to generate response' }, { status: 500 })
     }
     
   } catch (error) {

@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore';
 
-const UserInputDialog = ( {children, interviewType} ) => {
+const UserInputDialog = ({ children, interviewType }) => {
   const { userData } = useContext(UserContext);
   const practiceName = interviewType?.name || '';
   const isEnglishPractice = practiceName === 'English Practice';
@@ -29,6 +29,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
   const [experience, setExperience] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [tier, setTier] = useState('regular') // plan state
   const router = useRouter();
 
   const resetForm = () => {
@@ -65,7 +66,8 @@ const UserInputDialog = ( {children, interviewType} ) => {
         experience: requiresDetails ? experience : null,
         difficulty: 'medium',
         tags: requiresDetails ? extractTags([finalTopic, role, experience].join(' ')) : [],
-      });
+        tier, // pass selected plan
+      })
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to create discussion room');
@@ -89,7 +91,7 @@ const UserInputDialog = ( {children, interviewType} ) => {
       resetForm();
     } catch (error) {
       console.error("Error starting interview:", error);
-      alert("Error starting interview. Please try again.");
+      alert(error?.message || "Error starting interview. Please try again.");
     } finally {
       setIsCreating(false);
     }
@@ -123,7 +125,8 @@ const UserInputDialog = ( {children, interviewType} ) => {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild onClick={() => setIsOpen(true)}>{children}</DialogTrigger>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-sm space-y-3 px-3.5 py-3.5 sm:w-full sm:max-w-sm sm:space-y-3.5 sm:px-5 sm:py-5 max-h-[90vh] overflow-y-auto rounded-2xl">
+      {/* Smaller width + scrollable height */}
+      <DialogContent className="w-[92vw] max-w-md max-h-[70vh] overflow-y-auto rounded-2xl p-5 sm:p-6">
         <div className="rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 px-3 py-2.5 sm:px-4 sm:py-3.5 text-white shadow-md">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
             {practiceName || 'Interview'}
@@ -207,6 +210,42 @@ const UserInputDialog = ( {children, interviewType} ) => {
                 You’re all set for {practiceName || 'this interview'}—hit Start Interview whenever you’re ready.
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Plan selector – compact, no model names */}
+        <div className="space-y-2.5">
+          <span className="mb-1 block text-[11px] font-medium text-slate-600">Plan</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setTier('regular')}
+              className={`rounded-xl border px-3 py-3 text-left transition
+                ${tier === 'regular'
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Regular</span>
+                {tier === 'regular' && <span className="h-2 w-2 rounded-full bg-indigo-500" />}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">10 free/day</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTier('pro')}
+              className={`rounded-xl border px-3 py-3 text-left transition
+                ${tier === 'pro'
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Pro</span>
+                {tier === 'pro' && <span className="h-2 w-2 rounded-full bg-indigo-500" />}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">1 free/day</div>
+            </button>
           </div>
         </div>
 

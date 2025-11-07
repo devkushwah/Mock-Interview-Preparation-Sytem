@@ -34,7 +34,7 @@ const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
   }
 };
 
-export const AIModel = async (topicOrContext, expertType, msg) => {
+export const AIModel = async (topicOrContext, expertType, msg, modelOverride) => {
   let topic = '';
   let role = null;
   let experience = null;
@@ -76,7 +76,7 @@ export const AIModel = async (topicOrContext, expertType, msg) => {
       .replace(/{user_role}/gi, role || 'the target role')
       .replace(/{user_experience}/gi, experience || 'the candidate\'s experience level');
     
-    const model = option.model || "qwen/qwen-2.5-72b-instruct:free";
+    const model = modelOverride || option.model || "qwen/qwen-2.5-72b-instruct:free";
     
     const completion = await retryWithBackoff(async () => {
       return await openai.chat.completions.create({

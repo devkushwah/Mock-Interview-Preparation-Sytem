@@ -1,17 +1,8 @@
-import { db } from '@/lib/firebaseConfig';
+import { db } from '@/lib/firebaseConfig'
 import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  getDoc,  // Add this import
-  doc,
-  updateDoc,
-  serverTimestamp,
-  runTransaction,
-  increment,  // Import increment for atomic updates
-} from 'firebase/firestore';
+  collection, addDoc, getDocs, query, where,   // <-- add these
+  doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment
+} from 'firebase/firestore'
 
 // -------------------------------
 // 🔧 Helper Functions
@@ -165,16 +156,72 @@ export const deductCredits = async (userId, amount) => {
 
 /** Get user credits */
 export const getUserCredits = async (userId) => {
-  try {
-    if (!userId) throw new Error('userId required');
-    const userSnap = await getDoc(doc(db, 'users', userId));
-    if (!userSnap.exists()) throw new Error('User not found');
-    return userSnap.data().credit || 0;
-  } catch (error) {
-    console.error('❌ Error getting credits:', error.message);
-    throw new Error('Failed to get credits.');
+  if (!userId) throw new Error('userId required')
+  const ref = doc(db, 'users', userId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('User not found')
+
+  const data = snap.data() || {}
+  // Primary: 'credit' (your schema). Fallbacks kept for older docs.
+  let credits = data.credit
+  if (credits == null) credits = data.credits
+  if (credits == null) credits = data.availableCredits
+
+  if (typeof credits === 'string') {
+    const n = parseFloat(credits)
+    credits = Number.isFinite(n) ? n : 0
   }
-};
+  credits = Number.isFinite(credits) ? credits : 0
+  return credits
+}
+
+export const ensureHasCredits = async (userId) => {
+  const credits = await getUserCredits(userId)
+  console.log('[ensureHasCredits]', { userId, credits })
+  if (credits <= 0) {
+    throw new Error('You have no credits left. Please top up to start a new interview.')
+  }
+  return credits
+}
+
+// Update: per-tier limits -> regular:10/day, pro:1/day
+export const checkAndConsumeDailyFreeInterview = async (userId, tier = 'regular') => {
+  try {
+    if (!userId) throw new Error('userId required')
+
+    const limitMap = { regular: 10, pro: 1 }
+    const limit = limitMap[tier] ?? 0
+    if (limit <= 0) return { isFree: false }
+
+    const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // YYYY-MM-DD
+    const userRef = doc(db, 'users', userId)
+    let isFree = false
+
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(userRef)
+      if (!snap.exists()) throw new Error('User not found')
+
+      const data = snap.data() || {}
+      const tierData = data?.dailyFree?.[tier] || {}
+      const sameDay = tierData?.date === todayKey
+      const currentCount = sameDay ? (tierData?.count || 0) : 0
+
+      if (currentCount < limit) {
+        isFree = true
+        tx.update(userRef, {
+          [`dailyFree.${tier}.date`]: todayKey,
+          [`dailyFree.${tier}.count`]: currentCount + 1,
+          updatedAt: serverTimestamp(),
+        })
+      }
+    })
+
+    return { isFree }
+  } catch (error) {
+    console.error('checkAndConsumeDailyFreeInterview:', error)
+    return { isFree: false }
+  }
+}
 
 const CreateNewUser = async () => {
   if (!user?.primaryEmail || isCreatingUser) return;
