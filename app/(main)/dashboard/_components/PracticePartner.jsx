@@ -9,6 +9,7 @@ import { getUserCredits, getUserByEmail } from '@/services/firebase/userService'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebaseConfig'
 import { UserContext } from '@/app/_context/UserContext'
+import { Toaster } from 'sonner'
 
 const PracticePartner = ({ credits = 0 }) => {
   const user = useUser()
@@ -242,105 +243,109 @@ const PracticePartner = ({ credits = 0 }) => {
   }
 
   return (
-    <section className='relative left-1/2 right-1/2 w-screen -translate-x-1/2 bg-gradient-to-br from-white via-sky-50 to-white py-12'>
-      <div className='mx-auto flex w-full max-w-6xl flex-col items-center px-4 sm:px-6 lg:px-8'>
-        <header className='w-full text-center'>
-          <div className='mx-auto inline-flex items-center gap-2 rounded-full bg-blue-100/70 px-3 py-1 text-sm font-medium text-blue-700'>
-            <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4' />
-            </svg>
-            AI-Powered Interview Prep
-          </div>
-
-          <h1 className='mt-4 text-4xl font-extrabold leading-tight text-blue-700 md:text-5xl lg:text-6xl'>
-            Master Your Next<br className='hidden md:block' /> Interview
-          </h1>
-
-          <p className='mt-6 mx-auto max-w-2xl text-lg text-slate-600'>
-            Practice with AI interviewers, get instant feedback, and track your progress. {greeting}, {user?.displayName || 'there'} — your personal interview coach is ready 24/7.
-          </p>
-
-          <div className='mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row'>
-            <button
-              onClick={handleViewTracks}
-              className='flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white shadow-md transition hover:shadow-lg'
-            >
-              <svg xmlns='http://www.w3.org/2000/svg' className='h-5 w-5' viewBox='0 0 24 24' fill='currentColor'>
-                <path d='M5 3v18l15-9L5 3z' />
+    <>
+      {/* Global toast container (dashboard scope) */}
+      <Toaster richColors position="top-center" closeButton expand />
+      <section className='relative left-1/2 right-1/2 w-screen -translate-x-1/2 bg-gradient-to-br from-white via-sky-50 to-white py-12'>
+        <div className='mx-auto flex w-full max-w-6xl flex-col items-center px-4 sm:px-6 lg:px-8'>
+          <header className='w-full text-center'>
+            <div className='mx-auto inline-flex items-center gap-2 rounded-full bg-blue-100/70 px-3 py-1 text-sm font-medium text-blue-700'>
+              <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4' />
               </svg>
-              Start Free Practice
-            </button>
+              AI-Powered Interview Prep
+            </div>
 
-            <button
-              onClick={handleProfileClick}
-              className='rounded-full border border-slate-200 bg-white px-6 py-3 text-slate-700 shadow-sm transition hover:shadow'
-            >
-              View Profile
-            </button>
-          </div>
+            <h1 className='mt-4 text-4xl font-extrabold leading-tight text-blue-700 md:text-5xl lg:text-6xl'>
+              Master Your Next<br className='hidden md:block' /> Interview
+            </h1>
 
-          <div className='mt-8 flex flex-wrap justify-center gap-3'>
-            {features.map((feature) => (
-              <span key={feature} className='rounded-full bg-blue-50/80 px-4 py-2 text-sm text-slate-700 shadow'>
-                {feature}
-              </span>
-            ))}
-          </div>
-        </header>
+            <p className='mt-6 mx-auto max-w-2xl text-lg text-slate-600'>
+              Practice with AI interviewers, get instant feedback, and track your progress. {greeting}, {user?.displayName || 'there'} — your personal interview coach is ready 24/7.
+            </p>
 
-        <main className='mt-10 w-full'>
-          <section id='interview-tracks' className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-            {practiceOptions.map((option) => (
-              <UserInputDialog
-                interviewType={option}
-                key={option.id}
-                onSessionStarted={handleFreeSessionStart} // FIX: was onStart
+            <div className='mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row'>
+              <button
+                onClick={handleViewTracks}
+                className='flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white shadow-md transition hover:shadow-lg'
               >
-                <div className='group flex h-full cursor-pointer flex-col justify-between rounded-2xl bg-white p-6 shadow-md transition hover:-translate-y-1 hover:shadow-xl focus:outline-none'>
-                  <div className='flex items-start gap-4'>
-                    <div className='rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 p-3'>
-                      {renderIcon(option.iconType)}
-                    </div>
-                    <div>
-                      <h3 className='text-lg font-semibold text-slate-900'>{option.name}</h3>
-                      <p className='mt-2 text-sm text-slate-500'>{option.description}</p>
-                      <span className='mt-4 inline-block text-sm font-medium text-indigo-600'>
-                        Start Practice →
-                      </span>
+                <svg xmlns='http://www.w3.org/2000/svg' className='h-5 w-5' viewBox='0 0 24 24' fill='currentColor'>
+                  <path d='M5 3v18l15-9L5 3z' />
+                </svg>
+                Start Free Practice
+              </button>
+
+              <button
+                onClick={handleProfileClick}
+                className='rounded-full border border-slate-200 bg-white px-6 py-3 text-slate-700 shadow-sm transition hover:shadow'
+              >
+                View Profile
+              </button>
+            </div>
+
+            <div className='mt-8 flex flex-wrap justify-center gap-3'>
+              {features.map((feature) => (
+                <span key={feature} className='rounded-full bg-blue-50/80 px-4 py-2 text-sm text-slate-700 shadow'>
+                  {feature}
+                </span>
+              ))}
+            </div>
+          </header>
+
+          <main className='mt-10 w-full'>
+            <section id='interview-tracks' className='grid grid-cols-1 gap-6 md:grid-cols-2'>
+              {practiceOptions.map((option) => (
+                <UserInputDialog
+                  interviewType={option}
+                  key={option.id}
+                  onSessionStarted={handleFreeSessionStart} // FIX: was onStart
+                >
+                  <div className='group flex h-full cursor-pointer flex-col justify-between rounded-2xl bg-white p-6 shadow-md transition hover:-translate-y-1 hover:shadow-xl focus:outline-none'>
+                    <div className='flex items-start gap-4'>
+                      <div className='rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 p-3'>
+                        {renderIcon(option.iconType)}
+                      </div>
+                      <div>
+                        <h3 className='text-lg font-semibold text-slate-900'>{option.name}</h3>
+                        <p className='mt-2 text-sm text-slate-500'>{option.description}</p>
+                        <span className='mt-4 inline-block text-sm font-medium text-indigo-600'>
+                          Start Practice →
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </UserInputDialog>
-            ))}
-          </section>
+                </UserInputDialog>
+              ))}
+            </section>
 
-          <section className='mt-10 grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-6'>
-            {stats.map((stat) => (
-              <div key={stat.label} className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
-                <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{stat.number}</div>
-                <div className='mt-1 text-sm text-slate-500'>{stat.label}</div>
+            <section className='mt-10 grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-6'>
+              {stats.map((stat) => (
+                <div key={stat.label} className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+                  <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{stat.number}</div>
+                  <div className='mt-1 text-sm text-slate-500'>{stat.label}</div>
+                </div>
+              ))}
+              <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+                <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{uiCredits}</div>
+                <div className='mt-1 text-sm text-slate-500'>Available Credits</div>
               </div>
-            ))}
-            <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
-              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{uiCredits}</div>
-              <div className='mt-1 text-sm text-slate-500'>Available Credits</div>
-            </div>
-            <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
-              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>
-                {freeLeft.regular ?? '—'}
+              <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+                <div className='text-2xl font-bold text-blue-600 md:text-3xl'>
+                  {freeLeft.regular ?? '—'}
+                </div>
+                <div className='mt-1 text-sm text-slate-500'>Regular Free Left Today</div>
               </div>
-              <div className='mt-1 text-sm text-slate-500'>Regular Free Left Today</div>
-            </div>
-            <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
-              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>
-                {freeLeft.pro ?? '—'}
+              <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+                <div className='text-2xl font-bold text-blue-600 md:text-3xl'>
+                  {freeLeft.pro ?? '—'}
+                </div>
+                <div className='mt-1 text-sm text-slate-500'>Pro Free Left Today</div>
               </div>
-              <div className='mt-1 text-sm text-slate-500'>Pro Free Left Today</div>
-            </div>
-          </section>
-        </main>
-      </div>
-    </section>
+            </section>
+          </main>
+        </div>
+      </section>
+    </>
   )
 }
 

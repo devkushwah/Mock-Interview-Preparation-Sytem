@@ -1,4 +1,5 @@
 'use client'
+import { toast } from 'sonner'
 
 import React, { useState, useContext, useMemo } from 'react'
 import {
@@ -65,14 +66,34 @@ const UserInputDialog = ({ children, interviewType, onSessionStarted }) => {
         console.log(`[FREE UI] Session started | doc=${res.data.id} regularLeft(before->after) ${stats.before.leftRegular} -> ${stats.after.leftRegular} | proLeft ${stats.before.leftPro} -> ${stats.after.leftPro}`)
         // Pass AFTER counts to parent
         onSessionStarted && onSessionStarted(stats.after)
+        toast.success('Session created', {
+          description: 'Connecting to your interviewer...',
+        })
         router.push(`/dashboard/interview/${res.data.id}`)
         resetForm()
         setIsOpen(false)
       } else {
+        // Show clear feedback to user if free slots exhausted or other failure
         console.warn('Failed to create discussion room:', res.error)
+        const msg = res.error || 'Failed to start session. Please try again.'
+        // Suggest switching tiers if a specific tier is exhausted
+        const lower = msg.toLowerCase()
+        let action
+        if (lower.includes('regular')) {
+          action = { label: 'Try Pro', onClick: () => setTier('pro') }
+        } else if (lower.includes('pro')) {
+          action = { label: 'Try Regular', onClick: () => setTier('regular') }
+        }
+        toast.error(msg, {
+          description: 'Free sessions renew daily (IST).',
+          action,
+        })
       }
     } catch (e) {
       console.error('start error:', e)
+      toast.error('Something went wrong while starting the session.', {
+        description: 'Please try again in a moment.',
+      })
     } finally {
       setIsCreating(false)
     }
