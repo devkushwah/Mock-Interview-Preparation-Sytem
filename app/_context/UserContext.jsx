@@ -3,10 +3,7 @@ import React, { createContext, useState, useEffect } from 'react'
 import { useUser } from '@stackframe/stack'
 import { getUserByEmail, createUser } from '@/services/firebase/userService'
 
-export const UserContext = createContext({
-  userData: null,
-  setUserData: () => {},
-})
+export const UserContext = createContext(null)
 
 export const UserProvider = ({ children }) => {
   const stackUser = useUser()
@@ -24,12 +21,12 @@ export const UserProvider = ({ children }) => {
             avatar: stackUser.photoURL || null
           })
         }
+        // Use Firestore doc id everywhere
         setUserData({
           id: doc.id,
           email: doc.email,
           displayName: doc.name || stackUser.displayName || '',
           photoURL: doc.avatar || stackUser.photoURL || null,
-          credit: doc.credit || 0,
         })
       } catch (e) {
         console.error('UserContext init error:', e)

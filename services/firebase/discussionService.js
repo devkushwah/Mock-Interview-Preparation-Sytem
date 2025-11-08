@@ -109,18 +109,11 @@ export const createDiscussionRoom = async (discussionData) => {
 
     const tier = (discussionData.tier === 'pro') ? 'pro' : 'regular'
 
-    // Enforce per-tier daily free limits:
-    // If user selected a tier and there is no free slot left for that tier today,
-    // reject creation and ask user to wait till next day or upgrade/top-up.
+    await ensureHasCredits(discussionData.userId)
+
     const beforeCounts = await countTodaysFreeByTier(discussionData.userId)
     const decision = await decideFreeSession(discussionData.userId, tier)
-    if (!decision.isFree) {
-      const tierLabel = tier === 'pro' ? 'Pro' : 'Regular'
-      return {
-        success: false,
-        error: `${tierLabel} free sessions exhausted for today. Please wait until tomorrow or upgrade/top up to continue.`
-      }
-    }
+
     const beforeLeftRegular = Math.max(0, REGULAR_DAILY_LIMIT - beforeCounts.usedRegular)
     const beforeLeftPro = Math.max(0, PRO_DAILY_LIMIT - beforeCounts.usedPro)
 
