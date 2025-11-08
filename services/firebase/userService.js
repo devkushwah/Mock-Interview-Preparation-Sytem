@@ -1,7 +1,6 @@
 import { db } from '@/lib/firebaseConfig'
 import {
-  collection, addDoc, getDocs, query, where,   // <-- add these
-  doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment
+  collection, addDoc, getDoc, getDocs, updateDoc, doc, query, where, serverTimestamp, increment, runTransaction
 } from 'firebase/firestore'
 
 // -------------------------------
@@ -156,23 +155,11 @@ export const deductCredits = async (userId, amount) => {
 
 /** Get user credits */
 export const getUserCredits = async (userId) => {
-  if (!userId) throw new Error('userId required')
-  const ref = doc(db, 'users', userId)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) throw new Error('User not found')
-
+  if (!userId) return 0
+  const snap = await getDoc(doc(db, 'users', userId))
+  if (!snap.exists()) return 0
   const data = snap.data() || {}
-  // Primary: 'credit' (your schema). Fallbacks kept for older docs.
-  let credits = data.credit
-  if (credits == null) credits = data.credits
-  if (credits == null) credits = data.availableCredits
-
-  if (typeof credits === 'string') {
-    const n = parseFloat(credits)
-    credits = Number.isFinite(n) ? n : 0
-  }
-  credits = Number.isFinite(credits) ? credits : 0
-  return credits
+  return typeof data.credit === 'number' ? data.credit : 0
 }
 
 export const ensureHasCredits = async (userId) => {

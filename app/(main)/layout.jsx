@@ -1,15 +1,16 @@
 import React from 'react'
 import AppHeader from './_components/AppHeader'
+import AuthProvider from '@/app/_context/AuthProvider' // use AuthProvider, not UserProvider
 
-const dashboardLayout = ({ children }) => {
+export default function MainLayout({ children }) {
   return (
-    <div>
-      <AppHeader />
-      <div className='px-10 pb-10 lg:px-32 xl:px-56 2xl:px-64'>
-        {children}
+    <AuthProvider>
+      <div>
+        <AppHeader />
+        <div className='px-10 pb-10 lg:px-32 xl:px-56 2xl:px-64'>
+          {children}
+        </div>
       </div>
-    </div>
+    </AuthProvider>
   )
 }
-
-export default dashboardLayout

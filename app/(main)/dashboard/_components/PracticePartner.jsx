@@ -1,15 +1,137 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@stackframe/stack'
 import UserInputDialog from './UserInputDialog'
-// import { ExpertsList } from '@/constants/experts'
+import { getDailyFreeInterviewStatus } from '@/services/firebase/discussionService'
+import { getUserCredits, getUserByEmail } from '@/services/firebase/userService'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { db } from '@/lib/firebaseConfig'
+import { UserContext } from '@/app/_context/UserContext'
 
 const PracticePartner = ({ credits = 0 }) => {
   const user = useUser()
+  const { userData, setUserData, credits: ctxCredits = 0 } = useContext(UserContext) || {}
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
+  const [freeLeft, setFreeLeft] = useState({ regular: null, pro: null })
+  const [uiCredits, setUiCredits] = useState(credits)
+
+  // Firestore user id from context
+  const userId = useMemo(() => userData?.id || null, [userData?.id])
+  const userEmail = user?.email || userData?.email || null
+
+  const applyCounts = useCallback((regularLeft, proLeft, source) => {
+    setFreeLeft({ regular: regularLeft, pro: proLeft })
+    console.log(`[FREE UI] applyCounts source=${source} userId=${userId} regularLeft=${regularLeft} proLeft=${proLeft}`)
+  }, [userId])
+
+  // In computeRealtimeCounts treat missing createdAt as today
+  const computeRealtimeCounts = useCallback((docs) => {
+    const REGULAR_LIMIT = 10
+    const PRO_LIMIT = 1
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+
+    const isToday = (ts) => {
+      if (!ts) return true // Treat pending serverTimestamp as today
+      const d = ts.toDate ? ts.toDate() : new Date(ts)
+      return d >= startOfDay
+    }
+
+    let usedRegular = 0
+    let usedPro = 0
+    docs.forEach(d => {
+      const data = d.data()
+      if (!data?.isFreeSession) return
+      if (!isToday(data.createdAt)) return
+      if (data.tier === 'pro') usedPro++
+      else usedRegular++
+    })
+
+    const leftRegular = Math.max(0, REGULAR_LIMIT - usedRegular)
+    const leftPro = Math.max(0, PRO_LIMIT - usedPro)
+    applyCounts(leftRegular, leftPro, 'realtime')
+  }, [applyCounts])
+
+  const refreshDailyFree = useCallback(async () => {
+    if (!userId) return
+    const res = await getDailyFreeInterviewStatus(userId)
+    if (res?.success) {
+      applyCounts(res.data.regular.left, res.data.pro.left, 'fetch')
+    } else {
+      console.warn('getDailyFreeInterviewStatus error:', res?.error)
+    }
+  }, [userId, applyCounts])
+
+  useEffect(() => {
+    if (!userId) return
+    const q = query(
+      collection(db, 'discussionRooms'),
+      where('userId', '==', userId),
+      where('isFreeSession', '==', true)
+    )
+    const unsub = onSnapshot(q,
+      snap => computeRealtimeCounts(snap.docs),
+      err => {
+        console.warn('Realtime free counts error:', err)
+        refreshDailyFree()
+      }
+    )
+    refreshDailyFree()
+    return () => unsub()
+  }, [userId, computeRealtimeCounts, refreshDailyFree])
+
+  // Called after createDiscussionRoom with AFTER counts
+  const handleFreeSessionStart = useCallback((afterCounts) => {
+    if (afterCounts) {
+      applyCounts(afterCounts.leftRegular, afterCounts.leftPro, 'callback')
+    } else {
+      refreshDailyFree()
+    }
+  }, [applyCounts, refreshDailyFree])
+
+  // Reflect context credits immediately
+  useEffect(() => {
+    if (typeof ctxCredits === 'number') {
+      setUiCredits(ctxCredits)
+      console.log('[CREDITS] from context', { ctxCredits })
+    }
+  }, [ctxCredits])
+
+  useEffect(() => {
+    let active = true
+    const loadCredits = async () => {
+      try {
+        // Resolve Firestore ID by email if needed
+        if (!userId) {
+          if (!userEmail) return
+          const rec = await getUserByEmail(userEmail)
+          if (rec?.id) {
+            console.log('[CREDITS] resolved Firestore ID via email', { email: userEmail, id: rec.id })
+            setUserData && setUserData(prev => ({ ...(prev || {}), id: rec.id, email: rec.email || userEmail, credit: rec.credit }))
+            // Also reflect credits now
+            if (typeof rec.credit === 'number') setUiCredits(rec.credit)
+          }
+          return
+        }
+
+        // Skip fetch if context already has the same positive value
+        if (ctxCredits > 0 && ctxCredits === uiCredits) return
+
+        const c = await getUserCredits(userId)
+        if (active) {
+          setUiCredits(c)
+          console.log('[CREDITS] loaded from Firestore', { userId, credits: c })
+        }
+      } catch (e) {
+        console.warn('[CREDITS] load error', e?.message || e)
+      }
+    }
+    loadCredits()
+    return () => { active = false }
+  }, [userId, userEmail, setUserData, ctxCredits]) // re-run if id or ctx changes
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 250)
@@ -169,7 +291,11 @@ const PracticePartner = ({ credits = 0 }) => {
         <main className='mt-10 w-full'>
           <section id='interview-tracks' className='grid grid-cols-1 gap-6 md:grid-cols-2'>
             {practiceOptions.map((option) => (
-              <UserInputDialog interviewType={option} key={option.id}>
+              <UserInputDialog
+                interviewType={option}
+                key={option.id}
+                onSessionStarted={handleFreeSessionStart} // FIX: was onStart
+              >
                 <div className='group flex h-full cursor-pointer flex-col justify-between rounded-2xl bg-white p-6 shadow-md transition hover:-translate-y-1 hover:shadow-xl focus:outline-none'>
                   <div className='flex items-start gap-4'>
                     <div className='rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 p-3'>
@@ -188,7 +314,7 @@ const PracticePartner = ({ credits = 0 }) => {
             ))}
           </section>
 
-          <section className='mt-10 grid grid-cols-2 gap-6 md:grid-cols-4'>
+          <section className='mt-10 grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-6'>
             {stats.map((stat) => (
               <div key={stat.label} className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
                 <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{stat.number}</div>
@@ -196,8 +322,20 @@ const PracticePartner = ({ credits = 0 }) => {
               </div>
             ))}
             <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
-              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{credits}</div>
+              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>{uiCredits}</div>
               <div className='mt-1 text-sm text-slate-500'>Available Credits</div>
+            </div>
+            <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>
+                {freeLeft.regular ?? '—'}
+              </div>
+              <div className='mt-1 text-sm text-slate-500'>Regular Free Left Today</div>
+            </div>
+            <div className='rounded-xl bg-white py-6 px-4 text-center shadow-sm'>
+              <div className='text-2xl font-bold text-blue-600 md:text-3xl'>
+                {freeLeft.pro ?? '—'}
+              </div>
+              <div className='mt-1 text-sm text-slate-500'>Pro Free Left Today</div>
             </div>
           </section>
         </main>

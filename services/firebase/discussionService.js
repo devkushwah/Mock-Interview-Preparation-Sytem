@@ -1,20 +1,73 @@
 import { db } from '@/lib/firebaseConfig'
 import {
-  collection, addDoc, getDoc, getDocs, doc, updateDoc,
+  collection, addDoc, getDoc, getDocs, doc, updateDoc, setDoc,  // <-- add setDoc
   query, where, orderBy, startAfter, limit, serverTimestamp, increment
 } from 'firebase/firestore'
-import { ensureHasCredits, checkAndConsumeDailyFreeInterview } from './userService' // removed static updateUserStats import
-import { ExpertsList } from '@/services/options' // use alias to avoid resolution issues
-import { AIModel } from '@/services/GlobalServices' // use the real AIModel
-import { callGemini } from '@/services/geminiService' // import Gemini fallback
+import { ensureHasCredits } from '@/services/firebase/userService'
+import { ExpertsList } from '@/services/options'
+import { AIModel } from '@/services/GlobalServices'
+import { callGemini } from '@/services/geminiService'
 
 /** ---------------- Helper Functions ---------------- **/
+
+// Remove duplicated countTodaysFreeByTier / decideFreeSession (keep single versions below)
+
+// Daily limits
+const REGULAR_DAILY_LIMIT = 10
+const PRO_DAILY_LIMIT = 1
+
+const getStartOfDay = () => {
+  const d = new Date()
+  d.setHours(0,0,0,0)
+  return d
+}
+
+const dayKey = () => {
+  const d = new Date()
+  d.setHours(0,0,0,0)
+  // yyyy-mm-dd
+  const y = d.getFullYear()
+  const m = String(d.getMonth()+1).padStart(2,'0')
+  const da = String(d.getDate()).padStart(2,'0')
+  return `${y}-${m}-${da}`
+}
+
+const countTodaysFreeByTier = async (userId) => {
+  const startOfDay = getStartOfDay()
+  const snap = await getDocs(
+    query(
+      collection(db, 'discussionRooms'),
+      where('userId','==', userId),
+      where('isFreeSession','==', true)
+    )
+  )
+  let usedRegular = 0
+  let usedPro = 0
+  snap.forEach(s => {
+    const data = s.data() || {}
+    const ts = data.createdAt
+    const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null)
+    const isToday = !d || d >= startOfDay // treat missing timestamp as today
+    if (!isToday) return
+    if (data.tier === 'pro') usedPro++
+    else usedRegular++
+  })
+  return { usedRegular, usedPro }
+}
+
+const decideFreeSession = async (userId, tier) => {
+  const { usedRegular, usedPro } = await countTodaysFreeByTier(userId)
+  if (tier === 'pro') {
+    return { isFree: usedPro < PRO_DAILY_LIMIT, usedRegular, usedPro }
+  }
+  return { isFree: usedRegular < REGULAR_DAILY_LIMIT, usedRegular, usedPro }
+}
 
 const validateDiscussionInput = (d) => {
   if (!d) return 'discussionData required'
   if (!d.userId) return 'userId required'
-  if (!d.topic) return 'topic required'
   if (!d.practiceOption) return 'practiceOption required'
+  if (!d.topic || typeof d.topic !== 'string' || !d.topic.trim()) d.topic = 'General'
   return null
 }
 
@@ -52,32 +105,29 @@ const computeDurationMinutes = (start, end = new Date()) => {
 export const createDiscussionRoom = async (discussionData) => {
   try {
     const invalid = validateDiscussionInput(discussionData)
-    if (invalid) return { success: false, error: invalid }
+    if (invalid) return { success:false, error:invalid }
 
-    const tier = discussionData.tier === 'pro' ? 'pro' : 'regular'
+    const tier = (discussionData.tier === 'pro') ? 'pro' : 'regular'
 
-    // HARD GATE: user must have credits to start any interview (even free)
     await ensureHasCredits(discussionData.userId)
 
-    // Daily free slot per tier (regular:10/day, pro:1/day)
-    let isFreeSession = false
-    try {
-      const res = await checkAndConsumeDailyFreeInterview(discussionData.userId, tier)
-      isFreeSession = !!res.isFree
-    } catch (e) {
-      console.warn('dailyFree check failed:', e?.message)
-    }
+    const beforeCounts = await countTodaysFreeByTier(discussionData.userId)
+    const decision = await decideFreeSession(discussionData.userId, tier)
+
+    const beforeLeftRegular = Math.max(0, REGULAR_DAILY_LIMIT - beforeCounts.usedRegular)
+    const beforeLeftPro = Math.max(0, PRO_DAILY_LIMIT - beforeCounts.usedPro)
+
+    console.log(`[FREE] BEFORE CREATE | user=${discussionData.userId} tier=${tier} usedRegular=${beforeCounts.usedRegular}/${REGULAR_DAILY_LIMIT} usedPro=${beforeCounts.usedPro}/${PRO_DAILY_LIMIT} isFreeEligible=${decision.isFree} leftRegular=${beforeLeftRegular} leftPro=${beforeLeftPro}`)
 
     const newDiscussion = {
       userId: discussionData.userId,
       practiceOption: discussionData.practiceOption,
       topic: discussionData.topic,
       interviewerName: discussionData.interviewerName || null,
-      jobRole: discussionData.role || discussionData.jobRole || null,
+      role: discussionData.role || null,
       experience: discussionData.experience || null,
-      // new
       tier,
-      isFreeSession,
+      isFreeSession: !!decision.isFree,
       status: 'active',
       duration: 0,
       totalQuestions: 0,
@@ -87,20 +137,61 @@ export const createDiscussionRoom = async (discussionData) => {
       tags: discussionData.tags || [],
       isCompleted: false,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     }
 
-    const colRef = collection(db, 'discussionRooms')
-    const docRef = await addDoc(colRef, newDiscussion)
-    const createdDoc = await getDoc(docRef)
+    const ref = await addDoc(collection(db, 'discussionRooms'), newDiscussion)
 
+    // Safe per-day usage write (create if missing, never throw)
+    try {
+      if (decision.isFree) {
+        const key = dayKey()
+        const usageRef = doc(db, 'users', discussionData.userId, 'dailyUsage', key)
+        const incField = tier === 'pro' ? { proUsed: increment(1) } : { regularUsed: increment(1) }
+        // Ensure doc exists, then increment
+        await setDoc(usageRef, { dateKey: key, regularUsed: 0, proUsed: 0 }, { merge: true })
+        await setDoc(usageRef, { ...incField, lastDiscussionId: ref.id, lastUpdatedAt: serverTimestamp() }, { merge: true })
+        console.log(`[FREE] dailyUsage updated | user=${discussionData.userId} key=${key} inc=${tier}`)
+      }
+    } catch (e) {
+      console.warn('[FREE] dailyUsage write skipped:', e?.message || e)
+      // Do not fail the interview creation for analytics issues
+    }
+
+    // Optimistic AFTER
+    const afterUsedRegular = beforeCounts.usedRegular + (tier === 'regular' && decision.isFree ? 1 : 0)
+    const afterUsedPro = beforeCounts.usedPro + (tier === 'pro' && decision.isFree ? 1 : 0)
+    const afterLeftRegular = Math.max(0, REGULAR_DAILY_LIMIT - afterUsedRegular)
+    const afterLeftPro = Math.max(0, PRO_DAILY_LIMIT - afterUsedPro)
+
+    console.log(`[FREE] AFTER CREATE (OPTIMISTIC) | doc=${ref.id} tier=${tier} decremented=${decision.isFree ? 1 : 0} usedRegular=${afterUsedRegular}/${REGULAR_DAILY_LIMIT} usedPro=${afterUsedPro}/${PRO_DAILY_LIMIT} leftRegular=${afterLeftRegular} leftPro=${afterLeftPro}`)
+
+    setTimeout(async () => {
+      try {
+        const verify = await countTodaysFreeByTier(discussionData.userId)
+        const vLeftRegular = Math.max(0, REGULAR_DAILY_LIMIT - verify.usedRegular)
+        const vLeftPro = Math.max(0, PRO_DAILY_LIMIT - verify.usedPro)
+        console.log(`[FREE] VERIFY RECOUNT | user=${discussionData.userId} usedRegular=${verify.usedRegular}/${REGULAR_DAILY_LIMIT} usedPro=${verify.usedPro}/${PRO_DAILY_LIMIT} leftRegular=${vLeftRegular} leftPro=${vLeftPro}`)
+      } catch (e) {
+        console.warn('[FREE] VERIFY FAILED:', e?.message)
+      }
+    }, 500)
+
+    const snap = await getDoc(ref)
     return {
       success: true,
-      data: { id: docRef.id, ...(createdDoc.exists() ? createdDoc.data() : newDiscussion) }
+      data: {
+        id: ref.id,
+        ...(snap.exists() ? snap.data() : newDiscussion),
+        freeStats: {
+          before: { leftRegular: beforeLeftRegular, leftPro: beforeLeftPro },
+          after: { leftRegular: afterLeftRegular, leftPro: afterLeftPro }
+        }
+      }
     }
   } catch (error) {
     console.error('createDiscussionRoom error:', error)
-    return { success: false, error: error.message || String(error) }
+    return { success:false, error:error.message || String(error) }
   }
 }
 
@@ -347,6 +438,52 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
   }
 }
 
+/** ---------------- Free Interview Slots ---------------- **/
+
+export const getDailyFreeInterviewStatus = async (userId) => {
+  try {
+    if (!userId) return { success: false, error: 'userId required' }
+
+    const REGULAR_LIMIT = 10
+    const PRO_LIMIT = 1
+
+    const startOfDay = getStartOfDay()
+    const roomsQ = query(
+      collection(db, 'discussionRooms'),
+      where('userId', '==', userId),
+      where('isFreeSession', '==', true)
+    )
+    const snap = await getDocs(roomsQ)
+
+    const isToday = (ts) => {
+      // Treat missing/pending serverTimestamp as today
+      if (!ts) return true
+      const d = ts.toDate ? ts.toDate() : new Date(ts)
+      return d >= startOfDay
+    }
+
+    let usedRegular = 0
+    let usedPro = 0
+    snap.forEach(docSnap => {
+      const data = docSnap.data()
+      if (!isToday(data.createdAt)) return
+      if (data.tier === 'pro') usedPro++
+      else usedRegular++
+    })
+
+    return {
+      success: true,
+      data: {
+        regular: { used: usedRegular, left: Math.max(0, REGULAR_LIMIT - usedRegular), limit: REGULAR_LIMIT },
+        pro: { used: usedPro, left: Math.max(0, PRO_LIMIT - usedPro), limit: PRO_LIMIT }
+      }
+    }
+  } catch (e) {
+    console.error('getDailyFreeInterviewStatus error:', e)
+    return { success: false, error: e.message || String(e) }
+  }
+}
+
 /** ---------------- Export ---------------- **/
 export default {
   createDiscussionRoom,
@@ -358,5 +495,6 @@ export default {
   pauseDiscussion,
   resumeDiscussion,
   incrementDiscussionCounters,
-  generateAndSaveFullFeedback
+  generateAndSaveFullFeedback,
+  getDailyFreeInterviewStatus
 };

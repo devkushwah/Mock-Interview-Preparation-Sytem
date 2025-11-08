@@ -10,12 +10,11 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { UserContext } from '@/app/_context/UserContext';
-import { createDiscussionRoom } from '@/services/firebase/discussionService';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore';
 
-const UserInputDialog = ({ children, interviewType }) => {
+const UserInputDialog = ({ children, interviewType, onSessionStarted }) => {
   const { userData } = useContext(UserContext);
   const practiceName = interviewType?.name || '';
   const isEnglishPractice = practiceName === 'English Practice';
@@ -45,55 +44,37 @@ const UserInputDialog = ({ children, interviewType }) => {
     }
   };
 
-  const handleStartInterview = async () => {
-    const finalTopic = isEnglishPractice
-      ? 'English Practice'
-      : requiresDetails
-        ? topic
-        : practiceName || 'Interview Practice';
-
-    if (!userData?.id) return;
-    if (requiresDetails && (!finalTopic || !role || !experience)) return;
-
-    setIsCreating(true);
+  const handleStart = async () => {
+    if (isCreating) return
+    setIsCreating(true)
     try {
-      const result = await createDiscussionRoom({
-        userId: userData.id,
-        practiceOption: interviewType.name,
-        topic: finalTopic,
-        interviewerName: null,
-        role: requiresDetails ? role : null,
-        experience: requiresDetails ? experience : null,
-        difficulty: 'medium',
-        tags: requiresDetails ? extractTags([finalTopic, role, experience].join(' ')) : [],
-        tier, // pass selected plan
-      })
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create discussion room');
+      const payload = {
+        userId: userData?.id,
+        practiceOption: practiceName,
+        topic: topic || 'General',
+        role,
+        experience,
+        tier,
+        interviewerName: practiceName,
+        tags: extractTags(topic)
       }
-
-      const discussionId = result.data.id;  // Yeh change karo
-      console.log("Discussion room created:", discussionId);
-
-      // Fetch and log the document by ID for confirmation
-      const docRef = doc(db, 'discussionRooms', discussionId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        console.log("Fetched discussion room data by ID:", docSnap.data());
+      const { createDiscussionRoom } = await import('@/services/firebase/discussionService')
+      const res = await createDiscussionRoom(payload)
+      if (res.success) {
+        const stats = res.data.freeStats
+        console.log(`[FREE UI] Session started | doc=${res.data.id} regularLeft(before->after) ${stats.before.leftRegular} -> ${stats.after.leftRegular} | proLeft ${stats.before.leftPro} -> ${stats.after.leftPro}`)
+        // Pass AFTER counts to parent
+        onSessionStarted && onSessionStarted(stats.after)
+        router.push(`/dashboard/interview/${res.data.id}`)
+        resetForm()
+        setIsOpen(false)
       } else {
-        console.log("No discussion room found with this ID!");
+        console.warn('Failed to create discussion room:', res.error)
       }
-
-      router.push(`/dashboard/interview/${discussionId}`);  // Yeh bhi change karo
-
-      setIsOpen(false);
-      resetForm();
-    } catch (error) {
-      console.error("Error starting interview:", error);
-      alert(error?.message || "Error starting interview. Please try again.");
+    } catch (e) {
+      console.error('start error:', e)
     } finally {
-      setIsCreating(false);
+      setIsCreating(false)
     }
   };
 
@@ -250,7 +231,7 @@ const UserInputDialog = ({ children, interviewType }) => {
         </div>
 
         <button
-          onClick={handleStartInterview}
+          onClick={handleStart}
           disabled={
             isCreating ||
             (requiresDetails && (!topic || !role || !experience))
