@@ -1,92 +1,56 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react'  // useContext add karo yahan
-import { UserContext } from '@/app/_context/UserContext'  // Yeh import add karo
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react'
+import { UserContext } from '@/app/_context/UserContext'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { db } from '@/lib/firebaseConfig'
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore'  // Add this import
-import { Interviewer } from '@/services/options'
-import { UserButton } from '@stackframe/stack'
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { Button } from "@/components/ui/button"
 import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
 import { completeDiscussion, generateAndSaveFullFeedback } from '@/services/firebase/discussionService'
+import { Mic, MicOff, Pause, Volume2, WifiOff } from 'lucide-react'
 
-
-// Lazy load the dialog (no SSR)
 const InterviewEndDialog = dynamic(() => import('../../_components/InterviewEndDialog'), { ssr: false })
 
-/**
- * Simple debounce utility (leading = false)
- */
-const debounce = (fn, wait = 100) => {
-  let t = null
-  return (...args) => {
-    clearTimeout(t)
-    t = setTimeout(() => fn(...args), wait)
-  }
-}
+const FLUSH_INTERVAL_MS = 500
 
-/**
- * When to flush the messages from ref to state:
- * - on AI assistant reply
- * - every N messages (to keep UI in sync)
- */
-const FLUSH_BATCH_SIZE = 6 // tune this: larger => fewer renders but slower UI updates
-const FLUSH_INTERVAL_MS = 500 // ensure periodic flush for long streams
-
-// Pre-defined initial message from the interviewer (only 1 message, hardcoded for speed)
 const initialMessage = {
   role: 'assistant',
   content: 'Hello! To get started, please tell me a little about yourself. This will help me tailor the interview to your experience.'
 }
 
-// Fallback TTS function using browser speech synthesis (for initial message only)
-const playTTS = (text) => {
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1 // Adjust speed if needed
-    utterance.pitch = 1 // Adjust pitch if needed
-    window.speechSynthesis.speak(utterance)
-  } else {
-    console.warn('TTS not supported in this browser')
-  }
-}
-
 const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
-  const { userData } = useContext(UserContext);  // Yeh line add karo yahan
+  const { userData } = useContext(UserContext)
+
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showEndDialog, setShowEndDialog] = useState(false)
-  const [uiMessages, setUiMessages] = useState([]); // messages used for render (batched updates)
-  const messagesRef = useRef([]); // authoritative list (mutates often, no re-renders)
+  const [isEndingInterview, setIsEndingInterview] = useState(false)
+  const [elapsedTime, setElapsedTime] = useState(0)
+  const [isOffline, setIsOffline] = useState(false)
+
+  const [uiMessages, setUiMessages] = useState([])
+  const messagesRef = useRef([])
   const flushTimerRef = useRef(null)
   const lastFlushAtRef = useRef(Date.now())
-  const [isEndingInterview, setIsEndingInterview] = useState(false)  // Add this state for loading
+  const timerIntervalRef = useRef(null)
 
-  // Memoized interviewContext to avoid passing new object every render
   const interviewContext = useMemo(() => {
     if (!discussionRoomData) return null
     const { topic, difficulty, practiceOption, interviewerName } = discussionRoomData
     return { topic, difficulty, practiceOption, interviewerName }
   }, [discussionRoomData])
 
-  // Transcript-ready callback (memoized so hook sees stable ref)
-  const handleTranscriptReady = useCallback((transcript) => {
-    console.log('📝 Transcript ready:', transcript)
-    // do not force UI re-render here; feed into hook's internal state or messagesRef if needed
-  }, [])
+  const handleTranscriptReady = useCallback(() => {}, [])
 
-  // Hook -- removed initialMessage to prevent loop in hook/API
   const {
-    transcript,
-    interimTranscript,
     aiResponse,
     isAiProcessing,
-    conversationHistory, // we'll reconcile this with messagesRef (hook may deliver lots of items)
+    conversationHistory,
     isConnected,
     isConnecting,
     error: transcriptionError,
@@ -97,94 +61,105 @@ const InterviewPage = () => {
     interviewContext,
     discussionRoomData,
     handleTranscriptReady
-    // Removed: initialMessage -- handled in component only
   )
 
-  /**
-   * Firestore: listen to discussion room metadata in realtime using onSnapshot
-   * This gives instant local cache + updates
-   */
+  // Online/Offline detection
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('🌐 Back online')
+      setIsOffline(false)
+    }
+    const handleOffline = () => {
+      console.log('📡 Gone offline')
+      setIsOffline(true)
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    setIsOffline(!navigator.onLine)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // Timer for elapsed time
+  useEffect(() => {
+    if (isConnected) {
+      const startTime = Date.now()
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTime) / 1000))
+      }, 1000)
+    } else {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
+      setElapsedTime(0)
+    }
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+      }
+    }
+  }, [isConnected])
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Load discussion room with error handling
   useEffect(() => {
     if (!id) {
       setLoading(false)
       return
     }
+
     setLoading(true)
     const docRef = doc(db, 'discussionRooms', id)
-    const unsub = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = { id: snapshot.id, ...snapshot.data() }
-        setDiscussionRoomData(data)
-        setError(null)
-      } else {
-        setError('Discussion room not found')
+    
+    const unsub = onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists()) {
+          setDiscussionRoomData({ id: snap.id, ...snap.data() })
+          setError(null)
+        } else {
+          setError('Discussion room not found')
+        }
+        setLoading(false)
+      },
+      (err) => {
+        console.error('Firebase snapshot error:', err)
+        
+        if (err.code === 'unavailable' || err.message?.includes('offline')) {
+          setError('You appear to be offline. Please check your internet connection.')
+          setIsOffline(true)
+        } else {
+          setError('Failed to load interview room')
+        }
+        setLoading(false)
       }
-      setLoading(false)
-    }, (err) => {
-      console.error('onSnapshot error:', err)
-      setError('Failed to load interview room')
-      setLoading(false)
-    })
+    )
 
     return () => unsub()
   }, [id])
 
-  /**
-   * Sync incoming conversationHistory from hook -> messagesRef
-   * The hook may provide many small updates. We keep them in messagesRef and flush to UI in batches.
-   * Now includes the initial message if provided by the hook.
-   */
-  useEffect(() => {
-    if (!conversationHistory || conversationHistory.length === 0) return
-
-    // Append new items into messagesRef (assume conversationHistory contains incremental messages)
-    // To avoid duplications, we append only messages that aren't already present by shallow check of length or timestamps.
-    // Simpler: replace messagesRef entirely if conversationHistory looks authoritative from hook
-    try {
-      const currentLen = messagesRef.current.length
-      // If lengths the same, assume no new messages
-      if (conversationHistory.length === currentLen) return
-
-      // Replace if conversationHistory looks authoritative from hook
-      messagesRef.current = conversationHistory.slice() // shallow copy
-
-      // Decide whether to flush to UI immediately (if last message is assistant) or batch
-      const lastMsg = conversationHistory[conversationHistory.length - 1]
-      const shouldImmediateFlush = lastMsg?.role === 'assistant' || (conversationHistory.length - currentLen >= FLUSH_BATCH_SIZE)
-
-      if (shouldImmediateFlush) {
-        flushMessagesToUI()
-      } else {
-        scheduleFlush()
-      }
-    } catch (e) {
-      console.warn('Error reconciling conversationHistory:', e)
-      // fallback: set state directly
-      messagesRef.current = conversationHistory.slice()
-      flushMessagesToUI()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationHistory])
-
-  /**
-   * Flush messages from messagesRef to UI state (batched)
-   */
   const flushMessagesToUI = useCallback(() => {
-    // cancel pending
     if (flushTimerRef.current) {
       clearTimeout(flushTimerRef.current)
       flushTimerRef.current = null
     }
-    // update UI from ref (immutable copy)
     setUiMessages(prev => {
-      // micro-optimization: if identical arrays, skip
       const newArr = messagesRef.current.slice()
       if (prev.length === newArr.length) return prev
       return newArr
     })
     lastFlushAtRef.current = Date.now()
-
-    // smooth auto-scroll if needed
     requestAnimationFrame(() => {
       const c = document.getElementById('conversation-container')
       if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' })
@@ -199,353 +174,315 @@ const InterviewPage = () => {
     }, FLUSH_INTERVAL_MS)
   }, [flushMessagesToUI])
 
-  // Periodic flush backup in case streaming never triggers assistant message
   useEffect(() => {
-    const interval = setInterval(() => {
+    const iv = setInterval(() => {
       const since = Date.now() - lastFlushAtRef.current
-      if (since > FLUSH_INTERVAL_MS) {
-        flushMessagesToUI()
-      }
+      if (since > FLUSH_INTERVAL_MS) flushMessagesToUI()
     }, FLUSH_INTERVAL_MS)
-    return () => clearInterval(interval)
+    return () => clearInterval(iv)
   }, [flushMessagesToUI])
 
-  // Derived small helpers
-  const getInterviewerAvatar = useCallback((interviewerName) => {
-    const interviewer = Interviewer.find(i => i.name === interviewerName)
-    return interviewer?.avatar || '/avatars/Avatar.png'
-  }, [])
+  useEffect(() => {
+    if (!conversationHistory) return
+    messagesRef.current = conversationHistory.slice()
+    scheduleFlush()
+  }, [conversationHistory, scheduleFlush])
+
+  useEffect(() => {
+    if (aiResponse && !isAiProcessing) {
+      flushMessagesToUI()
+    }
+  }, [aiResponse, isAiProcessing, flushMessagesToUI])
+
+  const hasCredits = (userData?.credit ?? 0) >= 500
 
   const handleConnect = useCallback(async () => {
-    if (discussionRoomData) {
-      // Credit check before starting interview
-      try {
-        const { getUserCredits } = await import('@/services/firebase/userService');
-        const credits = await getUserCredits(discussionRoomData.userId);
-        if (credits < 500) { // Minimum credits to start (adjust as needed)
-          alert('Insufficient credits. You need at least 500 credits to start an interview.');
-          return;
-        }
-      } catch (error) {
-        console.error('Credit check failed:', error);
-        alert('Failed to check credits. Please try again.');
-        return;
-      }
-      await connect(discussionRoomData)
-      // Add initial message to UI and play TTS immediately after connect
-      messagesRef.current = [initialMessage]
-      setUiMessages([initialMessage])
-      playTTS(initialMessage.content)  // Play initial message via browser TTS
+    if (!discussionRoomData) return
+    
+    if (isOffline || !navigator.onLine) {
+      alert('You appear to be offline. Please check your internet connection and try again.')
+      return
     }
-  }, [connect, discussionRoomData])
 
-  /**
-   * End interview — show dialog immediately and generate feedback in background.
-   * This avoids blocking UI while AI runs feedback generation.
-   */
-  const handleEndInterview = useCallback(async () => {
-    setIsEndingInterview(true)
     try {
-      if (isAiProcessing) {
-        console.log('Stopping ongoing TTS...')
+      const { getUserCredits } = await import('@/services/firebase/userService')
+      const credits = await getUserCredits(discussionRoomData.userId)
+      if (credits < 500) {
+        alert('Insufficient credits. You need at least 500 credits to start an interview.')
+        return
       }
+    } catch (e) {
+      console.error('Credit check failed:', e)
+      if (e.code === 'unavailable' || e.message?.includes('offline')) {
+        alert('Cannot verify credits - you appear to be offline. Please check your connection.')
+        return
+      }
+      alert('Failed to check credits. Please try again.')
+      return
+    }
+    
+    await connect(discussionRoomData)
+    messagesRef.current = [initialMessage]
+    setUiMessages([initialMessage])
+  }, [connect, discussionRoomData, isOffline])
+
+  const handleEndInterview = useCallback(async () => {
+    if (!id) return
+    setIsEndingInterview(true)
+    
+    try {
       await disconnect()
-      
+
       const feedbackResult = await generateAndSaveFullFeedback(
         id,
         interviewContext?.practiceOption,
         interviewContext?.topic,
-        discussionRoomData?.userId // Pass userId for credit deduction
+        discussionRoomData?.userId
       )
-      if (!feedbackResult.success) {
-        console.error('Feedback generation failed:', feedbackResult.error)
-        await completeDiscussion(id, { feedback: null, userId: discussionRoomData?.userId })  // Added userId
+
+      if (!feedbackResult?.success) {
+        console.error('Feedback generation failed:', feedbackResult?.error)
+        await completeDiscussion(id, { feedback: null, userId: discussionRoomData?.userId })
       } else {
-        await completeDiscussion(id, { feedback: feedbackResult.feedback || null, userId: discussionRoomData?.userId })  // Added userId
+        await completeDiscussion(id, { feedback: feedbackResult.feedback || null, userId: discussionRoomData?.userId })
       }
-      
-      // Save conversation to Firestore
+
       if (conversationHistory && conversationHistory.length > 0) {
         await updateDoc(doc(db, 'discussionRooms', id), { conversation: conversationHistory })
       }
-      
+
       setShowEndDialog(true)
     } catch (err) {
       console.error('Error ending interview:', err)
+      
+      if (err.code === 'unavailable' || err.message?.includes('offline')) {
+        alert('Some data may not have been saved due to connection issues. Your conversation history has been preserved locally.')
+      }
+      
+      setShowEndDialog(true)
     } finally {
       setIsEndingInterview(false)
     }
-  }, [disconnect, id, interviewContext, isAiProcessing, conversationHistory, discussionRoomData])  // Added discussionRoomData to deps
+  }, [disconnect, id, interviewContext, conversationHistory, discussionRoomData])
 
-  // Auto-scroll on aiResponse (but non-blocking)
-  useEffect(() => {
-    if (aiResponse && !isAiProcessing) {
-      // ensure messages UI contains latest
-      // flush messages immediately so UI shows AI response
-      flushMessagesToUI()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiResponse, isAiProcessing])
-
-  // Clear session handler
-  const handleClearSession = useCallback(async () => {
-    try {
-      clearTranscript()
-      messagesRef.current = []
-      setUiMessages([])
-    } catch (err) {
-      console.error('clear session error:', err)
-    }
-  }, [clearTranscript])
-
-  const connectionBadgeClasses = isConnected
-    ? 'bg-green-100 text-green-700'
-    : isConnecting
-      ? 'bg-yellow-100 text-yellow-700'
-      : 'bg-slate-100 text-slate-500';
-
-  const connectionDotClasses = isConnected
-    ? 'bg-green-500'
-    : isConnecting
-      ? 'bg-yellow-500'
-      : 'bg-slate-400';
-
-  const statusMessage = !isConnected && !isConnecting
-    ? 'Ready when you are. Tap Start Interview to join the live session.'
-    : isConnecting
-      ? 'Setting up live audio connection...'
-      : isAiProcessing
-        ? 'AI is speaking. Review the response and prepare your next answer.'
-        : 'Microphone is live. Share your response when you’re ready.';
-
-  const currentModeLabel = isAiProcessing
-    ? '🎵 AI responding'
-    : isConnected
-      ? '🎤 Listening'
-      : '🔴 Offline';
-
-  const practiceLabel =
-    typeof discussionRoomData?.practiceOption === 'string'
-      ? discussionRoomData.practiceOption
-      : discussionRoomData?.practiceOption?.label ||
-        discussionRoomData?.practiceOption?.name ||
-        'Mock Interview';
-
-  const topicLabel = discussionRoomData?.topic || 'Interview Session';
-  const hasCredits = (userData?.credit ?? 0) >= 500;
+  const handleCloseDialog = useCallback(() => {
+    setShowEndDialog(false)
+    router.replace('/dashboard')
+  }, [router])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading interview room...</div>
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto"></div>
+          <p className="text-sm text-slate-600">Loading interview...</p>
+        </div>
       </div>
     )
   }
 
-  if (error) {
+  if (error || transcriptionError) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-500 text-lg">{error}</div>
+      <div className="flex h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="text-center max-w-md">
+          {isOffline && (
+            <div className="mb-4 flex justify-center">
+              <WifiOff className="h-12 w-12 text-red-500" />
+            </div>
+          )}
+          <p className="text-red-500 mb-4">{error || transcriptionError}</p>
+          <div className="flex gap-2 justify-center">
+            <Button onClick={() => router.back()} variant="outline">Go Back</Button>
+            {isOffline && (
+              <Button onClick={() => window.location.reload()} variant="default">
+                Retry Connection
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6 lg:py-8">
-        <header className="flex flex-col gap-4 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">
-              {practiceLabel}
-            </p>
-            <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
-              {topicLabel}
+    <div className="flex h-screen flex-col bg-slate-50">
+      {/* Offline Banner */}
+      {isOffline && (
+        <div className="sticky top-0 z-20 bg-red-500 text-white px-4 py-2 text-center text-sm flex items-center justify-center gap-2">
+          <WifiOff className="h-4 w-4" />
+          <span>You are offline. Some features may not work.</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="sticky top-0 z-10 border-b bg-white shadow-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xs font-semibold text-slate-900 md:text-base truncate">
+              {discussionRoomData?.topic || 'Technical Interview'} - {discussionRoomData?.practiceOption || 'Interview'}
             </h1>
-            {discussionRoomData?.role && (
-              <p className="text-sm text-slate-500">
-                Target role:{' '}
-                <span className="font-medium text-slate-700">{discussionRoomData.role}</span>
-              </p>
-            )}
-            {discussionRoomData?.experience && (
-              <p className="text-sm text-slate-500">
-                Experience:{' '}
-                <span className="font-medium text-slate-700">{discussionRoomData.experience}</span>
-              </p>
-            )}
-          </div>
-          <div className="flex justify-end">
-            <UserButton />
-          </div>
-        </header>
-
-        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:items-start">
-          <section className="order-2 w-full lg:order-1 lg:col-span-2">
-            <div className="flex h-[70vh] flex-col rounded-2xl bg-white p-4 shadow-sm sm:h-[68vh] lg:h-[70vh]">
-              <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
-                <span className={`flex items-center gap-2 rounded-full px-3 py-1 font-medium ${connectionBadgeClasses}`}>
-                  <span className={`h-2 w-2 rounded-full ${connectionDotClasses}`}></span>
-                  {currentModeLabel}
-                </span>
-                <span className="font-medium text-slate-400">Messages: {uiMessages.length}</span>
-              </div>
-
-              <div
-                id="conversation-container"
-                className="flex-1 overflow-x-hidden overflow-y-auto rounded-xl bg-slate-50 p-3 sm:p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300"
-              >
-                {uiMessages.length === 0 ? (
-                  <p className="text-center text-sm text-slate-500">
-                    Your conversation will appear here once the session begins.
-                  </p>
-                ) : (
-                  uiMessages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={`mb-3 flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} last:mb-0`}
-                    >
-                      <div
-                        className={`max-w-[84%] sm:max-w-[78%] rounded-2xl px-3 py-2 text-[12px] sm:text-[13px] leading-snug shadow-sm ${
-                          message.role === 'user'
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        <div
-                          className={`mb-1 text-[9px] sm:text-[10px] font-semibold uppercase tracking-wide ${
-                            message.role === 'user' ? 'text-white/75' : 'text-slate-500'
-                          }`}
-                        >
-                          {message.role === 'user' ? 'You' : 'AI Interviewer'}
-                        </div>
-                        <div className="max-h-40 sm:max-h-56 overflow-y-auto whitespace-pre-wrap leading-snug scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300">
-                          {message.content}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-3 text-xs text-slate-500">
-                {statusMessage}
-              </div>
+            <div className="flex items-center gap-2 md:gap-3 mt-1 text-[10px] md:text-xs text-slate-600">
+              <span className={`flex items-center gap-1 ${isConnected ? 'text-red-500' : 'text-slate-500'}`}>
+                <span className={`h-1.5 w-1.5 md:h-2 md:w-2 rounded-full ${isConnected ? 'bg-red-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                {isConnected ? 'Recording' : 'Ended'}
+              </span>
+              <span className="hidden sm:inline">•</span>
+              <span className="font-mono">{formatTime(elapsedTime)}</span>
             </div>
-          </section>
-
-          <aside className="order-1 w-full lg:order-2">
-            <div className="flex flex-col gap-4">
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-                  <img
-                    loading="lazy"
-                    src={getInterviewerAvatar(discussionRoomData?.interviewerName)}
-                    alt={discussionRoomData?.interviewerName || 'Interviewer'}
-                    className={`h-16 w-16 rounded-full object-cover transition-all duration-500 ${
-                      isConnected
-                        ? 'ring-2 ring-green-400'
-                        : isConnecting
-                          ? 'ring-2 ring-yellow-300'
-                          : 'ring-1 ring-slate-200'
-                    }`}
-                  />
-                  <div>
-                    <p className="text-base font-semibold text-slate-900">
-                      {discussionRoomData?.interviewerName || 'AI Interviewer'}
-                    </p>
-                    <p className="text-sm text-slate-500">{practiceLabel}</p>
-                  </div>
-                </div>
-
-                <dl className="mt-4 space-y-2 rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                  <div className="flex items-start justify-between gap-2">
-                    <dt className="font-medium text-slate-700">Difficulty</dt>
-                    <dd className="text-right capitalize">{discussionRoomData?.difficulty || 'Balanced'}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-2">
-                    <dt className="font-medium text-slate-700">Practice Option</dt>
-                    <dd className="text-right">{practiceLabel}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-2">
-                    <dt className="font-medium text-slate-700">Session ID</dt>
-                    <dd className="text-right text-xs text-slate-400">{discussionRoomData?.id || id}</dd>
-                  </div>
-                </dl>
-
-                {isAiProcessing && (
-                  <div className="mt-4 rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-600">
-                    Streaming response in progress...
-                  </div>
-                )}
-
-                {transcriptionError && (
-                  <div className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
-                    {transcriptionError}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                  {isConnected ? (
-                    <Button
-                      variant="destructive"
-                      onClick={handleEndInterview}
-                      disabled={isEndingInterview}
-                      className="w-full py-3 sm:flex-1"
-                    >
-                      {isEndingInterview ? 'Ending...' : 'End Interview'}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleConnect}
-                      disabled={isConnecting || !discussionRoomData || isEndingInterview || !hasCredits}
-                      className="w-full bg-blue-600 py-3 text-white hover:bg-blue-700 sm:flex-1"
-                    >
-                      {isConnecting ? 'Connecting...' : hasCredits ? 'Start Interview' : 'Insufficient Credits'}
-                    </Button>
-                  )}
-
-                  {(transcript || uiMessages.length > 0) && (
-                    <Button
-                      variant="outline"
-                      onClick={handleClearSession}
-                      disabled={isEndingInterview}
-                      className="w-full py-3 sm:flex-none sm:px-6"
-                    >
-                      Clear Session
-                    </Button>
-                  )}
-                </div>
-
-                <p className="mt-3 text-xs text-slate-500">{currentModeLabel}</p>
-                {!hasCredits && (
-                  <p className="mt-2 text-xs font-medium text-red-500">
-                    You need at least 500 credits to start a live interview.
-                  </p>
-                )}
-              </div>
-            </div>
-          </aside>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleEndInterview}
+            disabled={!isConnected || isEndingInterview}
+            className="ml-2 text-xs md:text-sm px-2 md:px-3 h-8 md:h-9 flex-shrink-0"
+          >
+            <MicOff className="mr-0 md:mr-1 h-3 w-3 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">End</span>
+          </Button>
         </div>
       </div>
 
-      {isEndingInterview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-2 rounded-lg bg-white p-6 shadow-lg">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-            <p className="text-sm text-slate-600">Just wait a few seconds, your feedback is being generated...</p>
+      {/* Conversation Area */}
+      <div
+        id="conversation-container"
+        className="flex-1 overflow-y-auto px-3 py-4 md:px-6 md:py-6"
+      >
+        {uiMessages.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center max-w-md px-4">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-blue-100 p-3 md:p-4">
+                  <Mic className="h-6 w-6 md:h-8 md:w-8 text-blue-600" />
+                </div>
+              </div>
+              <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">
+                Ready to start your mock interview? Click the button below to begin.
+              </p>
+              <Button
+                onClick={handleConnect}
+                disabled={isConnecting || !discussionRoomData || !hasCredits || isOffline}
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+              >
+                {isConnecting ? 'Connecting...' : isOffline ? 'Offline' : hasCredits ? 'Start Interview' : 'Insufficient Credits'}
+              </Button>
+              {!hasCredits && (
+                <p className="mt-3 text-xs text-red-500">You need at least 500 credits to start</p>
+              )}
+              {isOffline && (
+                <p className="mt-3 text-xs text-red-500">Please check your internet connection</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-4xl space-y-3 md:space-y-4">
+            {uiMessages.map((message, idx) => (
+              <div
+                key={idx}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`flex gap-2 md:gap-3 max-w-[90%] sm:max-w-[85%] md:max-w-[75%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className="flex-shrink-0">
+                    <div className={`h-7 w-7 md:h-10 md:w-10 rounded-full flex items-center justify-center text-white font-semibold text-xs md:text-sm ${
+                      message.role === 'user' ? 'bg-blue-600' : 'bg-slate-700'
+                    }`}>
+                      {message.role === 'user' ? 'Y' : 'AI'}
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-1 flex items-center gap-1.5 md:gap-2">
+                      <span className={`text-[9px] md:text-xs font-semibold uppercase tracking-wide ${
+                        message.role === 'user' ? 'text-blue-600' : 'text-slate-700'
+                      }`}>
+                        {message.role === 'user' ? 'Candidate' : 'Interviewer'}
+                      </span>
+                      <span className="text-[9px] md:text-[10px] text-slate-400">10:0{idx}</span>
+                    </div>
+                    <div
+                      className={`rounded-2xl px-3 py-2 md:px-4 md:py-3 text-xs md:text-sm leading-relaxed shadow-sm ${
+                        message.role === 'user'
+                          ? 'bg-blue-600 text-white rounded-tr-sm'
+                          : 'bg-white text-slate-700 border border-slate-200 rounded-tl-sm'
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap break-words">
+                        {message.content}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {isAiProcessing && (
+              <div className="flex justify-start">
+                <div className="flex gap-2 md:gap-3 max-w-[90%] sm:max-w-[85%] md:max-w-[75%]">
+                  <div className="flex-shrink-0">
+                    <div className="h-7 w-7 md:h-10 md:w-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold text-xs md:text-sm">
+                      AI
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="mb-1">
+                      <span className="text-[9px] md:text-xs font-semibold uppercase tracking-wide text-slate-700">
+                        Interviewer
+                      </span>
+                    </div>
+                    <div className="rounded-2xl rounded-tl-sm bg-white border border-slate-200 px-3 py-2 md:px-4 md:py-3 shadow-sm">
+                      <div className="flex items-center gap-1">
+                        <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Controls */}
+      {isConnected && (
+        <div className="sticky bottom-0 border-t bg-white/95 backdrop-blur-sm shadow-lg">
+          <div className="mx-auto max-w-4xl px-3 py-3 md:px-6 md:py-4">
+            <div className="flex items-center justify-center gap-2 md:gap-4">
+              <button className="flex h-12 w-12 md:h-16 md:w-16 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+                <Mic className="h-5 w-5 md:h-7 md:w-7" />
+              </button>
+              <button className="flex h-10 w-10 md:h-14 md:w-14 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                <Pause className="h-4 w-4 md:h-6 md:w-6" />
+              </button>
+              <button className="flex h-10 w-10 md:h-14 md:w-14 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                <Volume2 className="h-4 w-4 md:h-6 md:w-6" />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
+      {/* Ending Interview Overlay */}
+      {isEndingInterview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="mx-4 flex flex-col items-center gap-4 rounded-xl bg-white p-6 md:p-8 shadow-2xl max-w-sm">
+            <div className="h-10 w-10 md:h-12 md:w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+            <p className="text-center text-xs md:text-sm text-slate-600">
+              Generating your feedback...
+              <br />
+              <span className="text-[10px] md:text-xs text-slate-500">This may take a moment</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* End Dialog */}
       {showEndDialog && (
         <InterviewEndDialog
           discussionRoomId={id}
-          onClose={() => {
-            setShowEndDialog(false)
-            router.replace('/dashboard')
-          }}
+          onClose={handleCloseDialog}
         />
       )}
     </div>
