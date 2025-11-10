@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore'
 import { callGemini } from '@/services/geminiService'
 import { AIModel } from '@/services/GlobalServices'
+import { ExpertsList } from '@/services/options' // ✅ ADD THIS
 
 // Save message to subcollection: /discussionRooms/{roomId}/messages
 const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {
@@ -48,20 +49,19 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Message required' }, { status: 400 })
     }
 
-    // Fetch room to get tier and free flag
+    // Fetch room data
     let roomTier = 'regular'
     let isFreeSession = false
+    let roomData = null
+    
     if (discussionRoomId) {
       const snap = await getDoc(doc(db, 'discussionRooms', discussionRoomId))
       if (snap.exists()) {
-        const data = snap.data()
-        roomTier = (data?.tier || 'regular').toLowerCase()
-        isFreeSession = !!data?.isFreeSession
+        roomData = snap.data()
+        roomTier = (roomData?.tier || 'regular').toLowerCase()
+        isFreeSession = !!roomData?.isFreeSession
       }
     }
-
-    // Optional: basic rate limit (skip if missing userId)
-    // if (userId && !checkRateLimit(userId)) { return NextResponse.json({ error: 'Rate limit' }, { status: 429 }) }
 
     // Save user message
     if (discussionRoomId) {
@@ -70,25 +70,54 @@ export async function POST(request) {
 
     const interviewerName = context?.interviewerName || 'an experienced interviewer'
     const practiceOption = context?.practiceOption || 'Mock Interview'
+    const topic = context?.topic || roomData?.topic || 'General'
+    const role = roomData?.role || context?.role || null
+    const experience = roomData?.experience || context?.experience || null
 
-    const conversationPrompt = `You are ${interviewerName} conducting a ${practiceOption} session.
+    // ✅ FIX: Get the ACTUAL expert prompt from ExpertsList
+    const expert = ExpertsList.find(exp => exp.name === practiceOption) || ExpertsList[0]
+    
+    if (!expert || !expert.prompt) {
+      console.error('❌ Expert not found or missing prompt:', practiceOption)
+      return NextResponse.json({ error: 'Invalid interview type' }, { status: 400 })
+    }
 
-CRITICAL VOICE CONVERSATION RULES:
-- Give SHORT responses (1-2 sentences maximum)
-- Ask ONLY ONE question at a time
-- Be natural and conversational like speaking out loud
-- NO formatting, bullet points, or structured templates
-- Keep tone professional but friendly and encouraging
-- Wait for candidate's response before next question
+    // ✅ Use expert's detailed prompt and replace placeholders
+    let systemPrompt = expert.prompt
+      .replace(/{user_topic}/gi, topic)
+      .replace(/{user_role}/gi, role || 'the target role')
+      .replace(/{user_experience}/gi, experience || 'your experience level')
 
-Interview Context:
-- Type: ${practiceOption}
+    // ✅ Add voice-specific instructions (keep responses short for TTS)
+    const voiceInstructions = `
+
+VOICE CONVERSATION MODE:
+- Keep responses conversational and concise (2-3 sentences max)
+- Ask ONE clear question at a time
+- Speak naturally as if having a real interview conversation
+- NO bullet points, formatting, or long explanations in voice mode
+- Wait for candidate's response before proceeding
+
+`
+
+    systemPrompt += voiceInstructions
+
+    console.log('🎯 Using Expert Prompt:', {
+      practiceOption,
+      expert: expert.name,
+      promptPreview: systemPrompt.substring(0, 150) + '...',
+      hasRole: !!role,
+      hasExperience: !!experience
+    })
+
+    // ✅ Build conversation with proper system prompt
+    const conversationPrompt = `${systemPrompt}
 
 Candidate just said: "${message}"
 
-Respond naturally as an interviewer speaking out loud:`
+Respond as ${interviewerName}:`
 
-    // Strict routing by tier
+    // Route by tier
     let result
     if (roomTier === 'regular') {
       const geminiText = await callGemini(conversationPrompt)
@@ -97,16 +126,17 @@ Respond naturally as an interviewer speaking out loud:`
       }
       result = { success: true, response: geminiText }
     } else {
-      // Pro => force Qwen
+      // Pro => Qwen with expert prompt
       result = await AIModel(
-        { topic: context?.topic, role: null, experience: null, tier: 'pro' },
+        { topic, role, experience, tier: 'pro' },
         practiceOption,
-        conversationPrompt,
-        'qwen/qwen-2.5-72b-instruct:free'
+        message // Just send the user message, AIModel will handle system prompt
       )
     }
 
-    const aiText = result?.success ? result.response : "Sorry, I'm having trouble responding right now."
+    const aiText = result?.success 
+      ? result.response 
+      : "Sorry, I'm having trouble responding right now."
 
     if (discussionRoomId) {
       await saveMessageToDiscussionRoom(discussionRoomId, 'assistant', aiText)
