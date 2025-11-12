@@ -89,7 +89,18 @@ export async function POST(request) {
       .replace(/{user_experience}/gi, experience || 'your experience level')
 
     // ✅ Add voice-specific instructions (keep responses short for TTS)
-    const voiceInstructions = `
+    const isEnglishPractice = (practiceOption || '').toLowerCase() === 'english practice'
+    const voiceInstructions = isEnglishPractice ? `
+
+VOICE CONVERSATION MODE (English Practice):
+- Keep your replies short (1–2 sentences) and friendly.
+- Ask open-ended, everyday questions that invite long answers (aim 5–8+ sentences from the learner).
+- Encourage details, feelings, and stories. Avoid corporate/interview tone.
+- Give only lightweight corrections after the learner speaks (1–3 quick fixes or improved phrases).
+- No bullet points in normal voice responses; keep it natural and conversational.
+- Wait for the learner's response before continuing.
+
+` : `
 
 VOICE CONVERSATION MODE:
 - Keep responses conversational and concise (2-3 sentences max)

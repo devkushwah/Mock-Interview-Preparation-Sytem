@@ -13,6 +13,7 @@ const History = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedDiscussion, setSelectedDiscussion] = useState(null)
+  const [activeTab, setActiveTab] = useState('conversation') // 'conversation' | 'feedback'
   const router = useRouter()
 
   useEffect(() => {
@@ -33,6 +34,11 @@ const History = () => {
 
     if (userData?.id) fetchDiscussions();
   }, [userData]);
+
+  // Reset tab when opening/closing dialog
+  useEffect(() => {
+    if (selectedDiscussion) setActiveTab('conversation')
+  }, [selectedDiscussion])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -175,94 +181,128 @@ const History = () => {
           )}
 
           <Dialog open={!!selectedDiscussion} onOpenChange={() => setSelectedDiscussion(null)}>
-            <DialogContent className='max-w-4xl max-h-[80vh] overflow-y-auto rounded-3xl border border-indigo-100 bg-white p-8 shadow-[0_30px_70px_-35px_rgba(30,41,59,0.45)]'>
-              <DialogHeader>
-                <DialogTitle className='text-2xl font-semibold text-slate-900'>{selectedDiscussion?.topic}</DialogTitle>
-                <p className='text-sm text-slate-500'>{formatDate(selectedDiscussion?.createdAt)}</p>
-                {(selectedDiscussion?.jobRole || selectedDiscussion?.experience) && (
-                  <div className='mt-3 flex flex-wrap gap-2 text-xs font-medium text-indigo-600'>
-                    {selectedDiscussion?.jobRole && (
-                      <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
-                        Role: {selectedDiscussion.jobRole}
-                      </span>
-                    )}
-                    {selectedDiscussion?.experience && (
-                      <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
-                        Experience: {selectedDiscussion.experience}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </DialogHeader>
+            <DialogContent className='flex flex-col max-w-4xl max-h-[85vh] rounded-3xl border border-indigo-100 bg-white p-0 shadow-[0_30px_70px_-35px_rgba(30,41,59,0.45)]'>
+              <div className='sticky top-0 z-10 border-b bg-white/95 backdrop-blur px-5 py-4 shrink-0'>
+                <DialogHeader className='p-0'>
+                  <DialogTitle className='text-lg md:text-2xl font-semibold text-slate-900'>
+                    {selectedDiscussion?.topic || 'Interview Session'}
+                  </DialogTitle>
+                  <p className='text-xs md:text-sm text-slate-500 mt-1'>
+                    {formatDate(selectedDiscussion?.createdAt)}
+                  </p>
+                  {(selectedDiscussion?.jobRole || selectedDiscussion?.experience) && (
+                    <div className='mt-2 flex flex-wrap gap-2 text-[10px] md:text-xs font-medium text-indigo-600'>
+                      {selectedDiscussion?.jobRole && (
+                        <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
+                          Role: {selectedDiscussion.jobRole}
+                        </span>
+                      )}
+                      {selectedDiscussion?.experience && (
+                        <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
+                          Experience: {selectedDiscussion.experience}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </DialogHeader>
 
-              <div className='mt-6 space-y-6'>
-                <section>
-                  <h3 className='mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-500'>
-                    <span className='text-lg'>🗨️</span> Conversation
-                  </h3>
-                  <div className='space-y-3 rounded-2xl bg-slate-50 p-4'>
-                    {resolvedConversation.length ? (
-                      resolvedConversation.map((entry, idx) => {
-                        const sender = entry.sender || entry.role || 'assistant'
-                        const message = entry.message || entry.content || ''
-                        const isUser = sender === 'user'
-                        return (
-                          <div
-                            key={idx}
-                            className={`rounded-xl p-3 text-sm ${
-                              isUser ? 'bg-white text-slate-700 shadow-sm' : 'bg-indigo-100 text-indigo-700'
-                            }`}
-                          >
-                            <strong>{isUser ? 'You: ' : 'AI: '}</strong>
-                            {message}
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <p className='text-sm text-slate-500'>Conversation transcript will appear once the interview ends.</p>
-                    )}
-                  </div>
-                </section>
+                {/* Tabs */}
+                <div className='mt-3 grid grid-cols-2 gap-2 md:gap-3'>
+                  <button
+                    type='button'
+                    aria-pressed={activeTab === 'conversation'}
+                    onClick={() => setActiveTab('conversation')}
+                    className={`w-full rounded-full px-3 py-2 text-sm md:text-base font-semibold transition
+                      ${activeTab === 'conversation'
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    Conversations
+                  </button>
+                  <button
+                    type='button'
+                    aria-pressed={activeTab === 'feedback'}
+                    onClick={() => setActiveTab('feedback')}
+                    className={`w-full rounded-full px-3 py-2 text-sm md:text-base font-semibold transition
+                      ${activeTab === 'feedback'
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    Feedback
+                  </button>
+                </div>
+              </div>
 
-                <section>
-                  <h3 className='mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-500'>
-                    <span className='text-lg'>💡</span> AI Feedback
-                  </h3>
-                  <div className='space-y-4 rounded-2xl border border-indigo-100 bg-gradient-to-b from-yellow-50/60 to-white p-4 shadow-inner'>
-                    {selectedDiscussion?.feedback?.length ? (
-                      selectedDiscussion.feedback.map((fb, index) => (
-                        <div
-                          key={index}
-                          className={`rounded-xl border p-4 transition ${
-                            fb.strength
-                              ? 'bg-green-50 border-green-200'
-                              : 'bg-red-50 border-red-200'
-                          }`}
-                        >
-                          <div className='mb-2 flex items-center gap-2'>
-                            <span
-                              className={`text-sm font-semibold ${
-                                fb.strength ? 'text-green-700' : 'text-red-700'
+              <div className='flex-1 min-h-0 overflow-y-auto p-5 md:p-6 overscroll-contain'>
+                {activeTab === 'conversation' && (
+                  <section>
+                    {/* <h3 className='mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-500'>
+                      <span className='text-lg'>🗨️</span> Conversation
+                    </h3> */}
+                    <div className='space-y-3 rounded-2xl bg-slate-50 p-4'>
+                      {resolvedConversation.length ? (
+                        resolvedConversation.map((entry, idx) => {
+                          const sender = entry.sender || entry.role || 'assistant'
+                          const message = entry.message || entry.content || ''
+                          const isUser = sender === 'user'
+                          return (
+                            <div
+                              key={idx}
+                              className={`rounded-xl p-3 text-sm ${
+                                isUser ? 'bg-white text-slate-700 shadow-sm' : 'bg-indigo-100 text-indigo-700'
                               }`}
                             >
-                              {fb.strength ? '✅ Strength' : '⚠️ Area for Improvement'}
-                            </span>
+                              <strong>{isUser ? 'You: ' : 'AI: '}</strong>
+                              {message}
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <p className='text-sm text-slate-500'>Conversation transcript will appear once the interview ends.</p>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {activeTab === 'feedback' && (
+                  <section>
+                    <h3 className='mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-500'>
+                      <span className='text-lg'>💡</span> AI Feedback
+                    </h3>
+                    <div className='space-y-4 rounded-2xl border border-indigo-100 bg-gradient-to-b from-yellow-50/60 to-white p-4 shadow-inner'>
+                      {selectedDiscussion?.feedback?.length ? (
+                        selectedDiscussion.feedback.map((fb, index) => (
+                          <div
+                            key={index}
+                            className={`rounded-xl border p-4 transition ${
+                              fb.strength ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                            }`}
+                          >
+                            <div className='mb-2 flex items-center gap-2'>
+                              <span
+                                className={`text-sm font-semibold ${
+                                  fb.strength ? 'text-green-700' : 'text-red-700'
+                                }`}
+                              >
+                                {fb.strength ? '✅ Strength' : '⚠️ Area for Improvement'}
+                              </span>
+                            </div>
+                            <div className='mb-2 text-sm text-slate-700'>
+                              <strong className='text-slate-900'>Point:</strong> {fb.point}
+                            </div>
+                            <div className='text-sm text-slate-700'>
+                              <strong className='text-slate-900'>Feedback:</strong> {fb.feedback}
+                            </div>
                           </div>
-                          <div className='mb-2 text-sm text-slate-700'>
-                            <strong className='text-slate-900'>Point:</strong> {fb.point}
-                          </div>
-                          <div className='text-sm text-slate-700'>
-                            <strong className='text-slate-900'>Feedback:</strong> {fb.feedback}
-                          </div>
+                        ))
+                      ) : (
+                        <div className='rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 p-6 text-center text-sm text-indigo-600'>
+                          Feedback will be available once analysis completes.
                         </div>
-                      ))
-                    ) : (
-                      <div className='rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 p-6 text-center text-sm text-indigo-600'>
-                        Feedback will be available once analysis completes.
-                      </div>
-                    )}
-                  </div>
-                </section>
+                      )}
+                    </div>
+                  </section>
+                )}
               </div>
             </DialogContent>
           </Dialog>
