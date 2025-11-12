@@ -123,9 +123,45 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     }
   }, [playAudioChunks, startWithAI])
 
+  // Sanitize LLM text for TTS: remove markdown/code markers so TTS doesn't read them literally
+  const sanitizeForTTS = (text = '') => {
+    let t = String(text)
+
+    // Remove code blocks and inline code
+    t = t.replace(/```[\s\S]*?```/g, '')
+    t = t.replace(/`([^`]+)`/g, '$1')
+
+    // Remove emphasis/bold/italics markers
+    t = t.replace(/\*\*([^*]+)\*\*/g, '$1')
+    t = t.replace(/\*([^*]+)\*/g, '$1')
+    t = t.replace(/_([^_]+)_/g, '$1')
+    t = t.replace(/~([^~]+)~/g, '$1')
+
+    // Headings and blockquotes
+    t = t.replace(/^#{1,6}\s*/gm, '')
+    t = t.replace(/^\s*>{1,}\s?/gm, '')
+
+    // Lists -> readable dashes
+    t = t.replace(/^\s*[-*+]\s+/gm, '- ')
+
+    // Links and images -> keep visible text/alt
+    t = t.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+
+    // Remove any leftover standalone asterisks
+    t = t.replace(/\*/g, '')
+
+    // Collapse spaces
+    t = t.replace(/\s{2,}/g, ' ').trim()
+
+    return t
+  }
+
+  // Send text to TTS for streaming synthesis (now sanitized)
   const sendTextToTTS = useCallback((text) => {
     if (ttsWsRef.current?.readyState === WebSocket.OPEN) {
-      ttsWsRef.current.send(JSON.stringify({ type: 'Speak', text }))
+      const clean = sanitizeForTTS(text)
+      ttsWsRef.current.send(JSON.stringify({ type: 'Speak', text: clean }))
       ttsWsRef.current.send(JSON.stringify({ type: 'Flush' }))
     }
   }, [])

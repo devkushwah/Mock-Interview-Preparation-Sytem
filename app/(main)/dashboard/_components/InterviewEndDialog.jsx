@@ -12,46 +12,40 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (discussionRoomId) {
-        // Fetch chat history
+      if (!discussionRoomId) return
+      try {
         const history = await getConversationHistory(discussionRoomId)
         setChatHistory(history)
 
-        // Fetch feedback from discussion room
         const roomRef = doc(db, 'discussionRooms', discussionRoomId)
         const roomSnap = await getDoc(roomRef)
-        if (roomSnap.exists()) {
-          const roomData = roomSnap.data()
-          setFeedback(roomData.feedback || [])
-        }
-
+        if (roomSnap.exists()) setFeedback(roomSnap.data().feedback || [])
+      } finally {
         setLoading(false)
       }
     }
-    
     fetchData()
   }, [discussionRoomId])
 
-  // Reset to conversation tab every time dialog opens for a new room
-  useEffect(() => {
-    setActiveTab('conversation')
-  }, [discussionRoomId])
+  // Always reset tab on open
+  useEffect(() => setActiveTab('conversation'), [discussionRoomId])
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white w-full max-w-3xl sm:max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl max-h-[90vh] flex flex-col">
+    // Raise z-index so the page header never overlaps
+    <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white/95 w-full max-w-3xl sm:max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl ring-1 ring-black/5 max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header with Tabs */}
-        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b bg-white shrink-0">
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b bg-gradient-to-r from-slate-50 to-white">
           <h2 className="text-lg sm:text-2xl font-bold text-center mb-3">Interview Summary</h2>
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          <div className="mx-auto grid w-full max-w-sm grid-cols-2 gap-1 rounded-full bg-slate-100 p-1">
             <button
               type="button"
               aria-pressed={activeTab === 'conversation'}
               onClick={() => setActiveTab('conversation')}
-              className={`w-full rounded-full px-3 py-2 text-sm sm:text-base font-semibold transition
+              className={`w-full rounded-full px-3 py-2 text-sm sm:text-base font-medium transition
                 ${activeTab === 'conversation'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  ? 'bg-white text-slate-900 shadow'
+                  : 'text-slate-600 hover:text-slate-900'}`}
             >
               Conversations
             </button>
@@ -59,10 +53,10 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
               type="button"
               aria-pressed={activeTab === 'feedback'}
               onClick={() => setActiveTab('feedback')}
-              className={`w-full rounded-full px-3 py-2 text-sm sm:text-base font-semibold transition
+              className={`w-full rounded-full px-3 py-2 text-sm sm:text-base font-medium transition
                 ${activeTab === 'feedback'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  ? 'bg-white text-slate-900 shadow'
+                  : 'text-slate-600 hover:text-slate-900'}`}
             >
               Feedback
             </button>
@@ -70,7 +64,7 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 overscroll-contain">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
           {activeTab === 'conversation' && (
             <div>
               <h3 className="text-sm sm:text-lg font-semibold mb-3">Conversation</h3>
@@ -105,21 +99,19 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
               {loading ? (
                 <p className="text-sm text-slate-600">Loading feedback...</p>
               ) : feedback.length > 0 ? (
-                <div className="space-y-3 border rounded-xl p-3 bg-yellow-50">
+                <div className="space-y-3">
                   {feedback.map((fb, index) => (
                     <div
                       key={index}
-                      className={`p-3 rounded border
-                        ${fb.strength ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}
+                      className={`p-4 rounded-xl border shadow-sm bg-white
+                        ${fb.strength ? 'border-green-200' : 'border-red-200'}`}
                     >
-                      <div className="mb-2">
-                        <span className={`text-xs sm:text-sm font-bold
-                          ${fb.strength ? 'text-green-600' : 'text-red-600'}`}>
-                          {fb.strength ? '✅ Strength' : '⚠️ Area for Improvement'}
-                        </span>
+                      <div className={`text-xs sm:text-sm font-bold mb-2
+                        ${fb.strength ? 'text-green-600' : 'text-red-600'}`}>
+                        {fb.strength ? 'Strength' : 'Area for Improvement'}
                       </div>
-                      <div className="text-sm sm:text-base">
-                        <div className="mb-1"><strong>Point:</strong> {fb.point}</div>
+                      <div className="text-sm sm:text-base space-y-1">
+                        <div><strong>Point:</strong> {fb.point}</div>
                         <div><strong>Feedback:</strong> {fb.feedback}</div>
                       </div>
                     </div>
@@ -133,7 +125,7 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="px-4 sm:px-6 py-3 border-t bg-white shrink-0">
+        <div className="px-4 sm:px-6 py-3 border-t bg-white">
           <div className="flex justify-center">
             <button
               onClick={onClose}

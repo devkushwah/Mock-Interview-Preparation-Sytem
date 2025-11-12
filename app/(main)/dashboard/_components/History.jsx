@@ -15,6 +15,7 @@ const History = () => {
   const [selectedDiscussion, setSelectedDiscussion] = useState(null)
   const [activeTab, setActiveTab] = useState('conversation') // 'conversation' | 'feedback'
   const router = useRouter()
+  const [clickedId, setClickedId] = useState(null) // NEW: which card was clicked
 
   useEffect(() => {
     const fetchDiscussions = async () => {
@@ -38,6 +39,7 @@ const History = () => {
   // Reset tab when opening/closing dialog
   useEffect(() => {
     if (selectedDiscussion) setActiveTab('conversation')
+    if (!selectedDiscussion) setClickedId(null) // clear highlight when dialog closes
   }, [selectedDiscussion])
 
   const formatDate = (dateString) => {
@@ -113,70 +115,80 @@ const History = () => {
             </div>
           ) : (
             <div className='mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:mx-auto lg:max-w-4xl xl:max-w-5xl'>
-              {discussions.map((discussion) => (
-                <article
-                  key={discussion.id}
-                  className='group relative flex h-full flex-col justify-between rounded-2xl border border-transparent bg-gradient-to-br from-white/95 to-indigo-50/50 p-6 shadow-[0_25px_55px_-35px_rgba(79,70,229,0.45)] transition hover:-translate-y-1 hover:border-indigo-300/60 hover:shadow-[0_35px_70px_-40px_rgba(129,140,248,0.6)]'
-                >
-                  <div className='flex flex-col gap-3'>
-                    <div className='flex items-center justify-between'>
-                      <div className='flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-indigo-600'>
-                        <span className='inline-block h-2 w-2 rounded-full bg-indigo-500' />
-                        {discussion.practiceOption || 'Custom Track'}
+              {discussions.map((discussion) => {
+                const isActive = clickedId === discussion.id
+                return (
+                  <article
+                    key={discussion.id}
+                    className={`group relative overflow-hidden flex h-full flex-col justify-between rounded-2xl
+                      ring-1 ring-slate-200 bg-gradient-to-br from-indigo-50/60 via-white to-white p-6
+                      shadow-md transition
+                      hover:-translate-y-1 hover:ring-indigo-300 hover:shadow-lg
+                      ${isActive ? 'ring-2 ring-indigo-400 bg-indigo-50/80 scale-[0.995]' : ''}`}
+                  >
+                    {/* Left accent bar */}
+                    <span className='pointer-events-none absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-indigo-500 to-violet-400 opacity-70' />
+                    {/* Decorative glow */}
+                    <span className='pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-indigo-300/20 blur-3xl' />
+                    <span className='pointer-events-none absolute -left-24 -bottom-24 h-44 w-44 rounded-full bg-violet-300/20 blur-3xl' />
+
+                    <div className='relative flex flex-col gap-3'>
+                      <div className='flex items-center justify-between'>
+                        <div className='flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-indigo-600'>
+                          <span className='inline-block h-2 w-2 rounded-full bg-indigo-500' />
+                          {discussion.practiceOption || 'Custom Track'}
+                        </div>
+                        <span
+                          className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${getStatusColor(
+                            discussion.status
+                          )}`}
+                        >
+                          <span className='inline-block h-2 w-2 rounded-full bg-current opacity-70' />
+                          {discussion.status}
+                        </span>
                       </div>
-                      <span
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${getStatusColor(
-                          discussion.status
-                        )}`}
-                      >
-                        <span className='inline-block h-2 w-2 rounded-full bg-current opacity-70' />
-                        {discussion.status}
-                      </span>
+
+                      <h3 className='text-lg font-semibold text-slate-900'>{discussion.topic || 'Untitled Session'}</h3>
+                      <p className='text-sm text-slate-500'>{formatDate(discussion.createdAt)}</p>
+                      {(discussion.jobRole || discussion.experience) && (
+                        <div className='flex flex-wrap gap-2 text-[11px] font-medium text-indigo-700'>
+                          {discussion.jobRole && (
+                            <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
+                              Role: {discussion.jobRole}
+                            </span>
+                          )}
+                          {discussion.experience && (
+                            <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
+                              Experience: {discussion.experience}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <p className='text-sm text-slate-600 line-clamp-2'>
+                        {discussion.summary || 'Open the session to review detailed highlights and AI notes.'}
+                      </p>
                     </div>
 
-                    <h3 className='text-lg font-semibold text-slate-900'>{discussion.topic || 'Untitled Session'}</h3>
-                    <p className='text-sm text-slate-500'>{formatDate(discussion.createdAt)}</p>
-                    {(discussion.jobRole || discussion.experience) && (
-                      <div className='flex flex-wrap gap-2 text-xs font-medium text-indigo-600'>
-                        {discussion.jobRole && (
-                          <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
-                            Role: {discussion.jobRole}
-                          </span>
-                        )}
-                        {discussion.experience && (
-                          <span className='rounded-full bg-indigo-50 px-2.5 py-1'>
-                            Experience: {discussion.experience}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    <p className='text-sm text-slate-600 line-clamp-2'>
-                      {discussion.summary || 'Open the session to review detailed highlights and AI notes.'}
-                    </p>
-                  </div>
-
-                  <div className='mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-                    <button
-                      onClick={() => router.push(`/dashboard/interview/${discussion.id}`)}
-                      className='flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_20px_45px_-25px_rgba(79,70,229,0.6)] transition hover:shadow-[0_25px_55px_-25px_rgba(79,70,229,0.75)] sm:w-auto sm:px-5'
-                    >
-                      Resume
-                      <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' viewBox='0 0 24 24' fill='currentColor'>
-                        <path d='M5 3v18l15-9L5 3z' />
-                      </svg>
-                    </button>
-
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='w-full rounded-full border-indigo-300/60 bg-white/80 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-700 sm:w-auto'
-                      onClick={() => setSelectedDiscussion(discussion)}
-                    >
-                      View Feedback
-                    </Button>
-                  </div>
-                </article>
-              ))}
+                    {/* Actions */}
+                    <div className='mt-6 flex justify-end relative'>
+                      <Button
+                        size='sm'
+                        className={`rounded-full transition-all duration-200 shadow-sm sm:w-auto
+                          ${isActive
+                            ? 'bg-indigo-700 text-white hover:bg-indigo-800 px-5'
+                            : 'w-full bg-indigo-600 text-white hover:bg-indigo-700 px-5'}`}
+                        onClick={() => {
+                          setClickedId(discussion.id)
+                          setSelectedDiscussion(discussion)
+                        }}
+                        aria-pressed={isActive}
+                      >
+                        View Feedback
+                      </Button>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           )}
 
