@@ -95,7 +95,7 @@ const History = () => {
   }
 
   return (
-    <section className='relative left-1/2 right-1/2 w-screen -translate-x-1/2 pt-0 pb-12 bg-gradient-to-br from-white via-indigo-50 to-white'>
+    <section id="history" className='relative left-1/2 right-1/2 w-screen -translate-x-1/2 pt-0 pb-12 bg-gradient-to-br from-white via-indigo-50 to-white'>
       <div className='w-full'>
         <div className='rounded-3xl bg-white/95 p-10 shadow-[0_25px_60px_-30px_rgba(30,41,59,0.25)]'>
           <header className='flex flex-col items-center gap-2 text-center'>

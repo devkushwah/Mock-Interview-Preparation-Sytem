@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useContext } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { UserButton } from '@stackframe/stack'
 import { Github, Linkedin, User } from 'lucide-react'
@@ -31,16 +32,18 @@ export default function Page() {
       <header className="w-full py-4 px-6 md:px-12 bg-gray-100 shadow-md flex justify-between items-center sticky top-0 z-50">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900">AI Mock Interview</h1>
 
-        {/* Desktop Nav */}
-        <nav className="hidden md:flex gap-6 text-gray-700 font-medium">
-          <a href="#features" className="hover:text-indigo-600">Features</a>
-          <a href="#testimonials" className="hover:text-indigo-600">Testimonials</a>
-          <a href="#contact" className="hover:text-indigo-600">Contact</a>
+        {/* Desktop Nav - homepage: Features / Testimonials / Contact kept, increased gap */}
+        <nav className="hidden md:flex gap-10 text-gray-700 font-medium">
+          <Link href="/" className="hover:text-indigo-600 px-2">Home</Link>
+          <a href="#features" className="hover:text-indigo-600 px-2">Features</a>
+          <a href="#testimonials" className="hover:text-indigo-600 px-2">Testimonials</a>
+          <a href="#contact" className="hover:text-indigo-600 px-2">Contact</a>
+          <Link href="/dashboard" className="hover:text-indigo-600 px-2">Dashboard</Link>
         </nav>
 
-        {/* Right Side - removed Get Started from header */}
+        {/* Right Side */}
         <div className="flex items-center gap-3">
-          {/* only show UserButton when user is signed in */}
+          {/* show UserButton when signed in */}
           {user ? <UserButton /> : null}
 
           {/* Hamburger Menu (Mobile) */}
@@ -65,12 +68,14 @@ export default function Page() {
           </button>
         </div>
 
-        {/* Mobile Nav */}
+        {/* Mobile Nav (more spacing) */}
         {menuOpen && (
-          <div className="absolute top-full left-0 w-full bg-white shadow-md flex flex-col items-center py-4 space-y-4 md:hidden z-40">
-            <a href="#features" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium hover:text-indigo-600">Features</a>
-            <a href="#testimonials" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium hover:text-indigo-600">Testimonials</a>
-            <a href="#contact" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium hover:text-indigo-600">Contact</a>
+          <div className="absolute top-full left-0 w-full bg-white shadow-md flex flex-col items-center py-6 space-y-4 md:hidden z-40">
+            <Link href="/" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Home</Link>
+            <a href="#features" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Features</a>
+            <a href="#testimonials" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Testimonials</a>
+            <a href="#contact" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Contact</a>
+            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Dashboard</Link>
           </div>
         )}
       </header>
@@ -197,7 +202,7 @@ export default function Page() {
         {/* Social / Profiles - colorful larger icons */}
         <div className="mt-8 flex justify-center gap-6">
           <a
-            href="https://github.com/your-username"
+            href="https://github.com/devkushwah"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
@@ -209,7 +214,7 @@ export default function Page() {
           </a>
 
           <a
-            href="https://www.linkedin.com/in/your-username"
+            href="https://www.linkedin.com/in/devkushwah"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="LinkedIn"
@@ -221,7 +226,7 @@ export default function Page() {
           </a>
 
           <a
-            href="https://your-portfolio.example.com"
+            href="https://devkushwah.vercel.app"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Profile"

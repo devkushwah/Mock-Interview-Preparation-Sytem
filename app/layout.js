@@ -17,8 +17,12 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "InterviewPrime",
   description: "AI-powered Mock Interview & English Coach Platform",
+  // use explicit favicon files with sizes (place matching files in /public)
   icons: {
-    icon: '/logo/logo.png',
+    icon: [
+      { url: '/logo/logo.png', sizes: '16x16', type: 'image/png' }, // smaller favicon
+      { url: '/logo/logo.png', sizes: '8x8', type: 'image/png' }    // extra-small fallback
+    ]
   },
 };
 
