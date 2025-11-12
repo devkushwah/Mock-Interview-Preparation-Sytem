@@ -1,13 +1,29 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useContext } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { UserButton } from '@stackframe/stack'
-import { Github, Linkedin, User } from 'lucide-react' // added icons
+import { Github, Linkedin, User } from 'lucide-react'
+import { UserContext } from '@/app/_context/UserContext'
 
-const Page = () => {
+export default function Page() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectParam = searchParams?.get('redirect_url') || null
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // get global user state from AuthProvider
+  const ctx = useContext(UserContext)
+  const user = ctx?.userData
+
+  // navigate to dashboard if signed in, otherwise open Stack sign-in handler with redirect
+  const handleGetStarted = () => {
+    if (user) {
+      router.push('/dashboard')
+    } else {
+      router.push('/handler/sign-in?redirect_url=/dashboard')
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col text-gray-800 scroll-smooth">
@@ -22,20 +38,16 @@ const Page = () => {
           <a href="#contact" className="hover:text-indigo-600">Contact</a>
         </nav>
 
-        {/* Right Side */}
+        {/* Right Side - removed Get Started from header */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition"
-          >
-            Get Started
-          </button>
-          <UserButton />
+          {/* only show UserButton when user is signed in */}
+          {user ? <UserButton /> : null}
 
           {/* Hamburger Menu (Mobile) */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="md:hidden ml-2 focus:outline-none"
+            aria-label="menu"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -45,19 +57,9 @@ const Page = () => {
               stroke="currentColor"
             >
               {menuOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               )}
             </svg>
           </button>
@@ -66,27 +68,9 @@ const Page = () => {
         {/* Mobile Nav */}
         {menuOpen && (
           <div className="absolute top-full left-0 w-full bg-white shadow-md flex flex-col items-center py-4 space-y-4 md:hidden z-40">
-            <a
-              href="#features"
-              onClick={() => setMenuOpen(false)}
-              className="text-gray-700 font-medium hover:text-indigo-600"
-            >
-              Features
-            </a>
-            <a
-              href="#testimonials"
-              onClick={() => setMenuOpen(false)}
-              className="text-gray-700 font-medium hover:text-indigo-600"
-            >
-              Testimonials
-            </a>
-            <a
-              href="#contact"
-              onClick={() => setMenuOpen(false)}
-              className="text-gray-700 font-medium hover:text-indigo-600"
-            >
-              Contact
-            </a>
+            <a href="#features" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium hover:text-indigo-600">Features</a>
+            <a href="#testimonials" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium hover:text-indigo-600">Testimonials</a>
+            <a href="#contact" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium hover:text-indigo-600">Contact</a>
           </div>
         )}
       </header>
@@ -99,7 +83,7 @@ const Page = () => {
         </p>
         <div className="flex flex-wrap justify-center gap-4">
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={handleGetStarted}
             className="bg-white text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"
           >
             Get Started
@@ -259,5 +243,3 @@ const Page = () => {
     </div>
   )
 }
-
-export default Page
