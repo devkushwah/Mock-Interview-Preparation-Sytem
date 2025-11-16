@@ -22,7 +22,7 @@ const History = () => {
       try {
         const result = await getUserDiscussions(userData.id, 10);
         if (result.success) {
-          setDiscussions(result.data.items);  // Yeh change karo
+          setDiscussions(result.data.items);  
         } else {
           setError(result.error);
         }
@@ -194,7 +194,19 @@ const History = () => {
 
           <Dialog open={!!selectedDiscussion} onOpenChange={() => setSelectedDiscussion(null)}>
             <DialogContent className='flex flex-col max-w-4xl max-h-[85vh] rounded-3xl border border-indigo-100 bg-white p-0 shadow-[0_30px_70px_-35px_rgba(30,41,59,0.45)]'>
-              <div className='sticky top-0 z-10 border-b bg-white/95 backdrop-blur px-5 py-4 shrink-0'>
+              <div className='sticky top-0 z-10 border-b bg-white/95 backdrop-blur px-5 py-4 shrink-0 relative'>
+                {/* Close (X) button in top-right of dialog */}
+                <button
+                  type='button'
+                  onClick={() => setSelectedDiscussion(null)}
+                  aria-label='Close dialog'
+                  className='absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-300'
+                >
+                  <svg xmlns='http://www.w3.org/2000/svg' className='h-4 w-4' viewBox='0 0 20 20' fill='currentColor' aria-hidden='true'>
+                    <path fillRule='evenodd' d='M10 8.586l4.95-4.95a1 1 0 111.414 1.414L11.414 10l4.95 4.95a1 1 0 01-1.414 1.414L10 11.414l-4.95 4.95a1 1 0 01-1.414-1.414L8.586 10 3.636 5.05A1 1 0 015.05 3.636L10 8.586z' clipRule='evenodd' />
+                  </svg>
+                </button>
+
                 <DialogHeader className='p-0'>
                   <DialogTitle className='text-lg md:text-2xl font-semibold text-slate-900'>
                     {selectedDiscussion?.topic || 'Interview Session'}

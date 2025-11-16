@@ -1,6 +1,6 @@
 import { db } from '@/lib/firebaseConfig'
 import {
-  collection, addDoc, getDoc, getDocs, doc, updateDoc, setDoc,  // <-- add setDoc
+  collection, addDoc, getDoc, getDocs, doc, updateDoc, setDoc,  
   query, where, orderBy, startAfter, limit, serverTimestamp, increment
 } from 'firebase/firestore'
 import { ensureHasCredits } from '@/services/firebase/userService'
@@ -401,7 +401,16 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
 
     // Pass tier to AIModel so it routes correctly
     const contextForModel = { topic, role, experience, tier }
-    const result = await AIModel(contextForModel, practiceOption, fullPrompt)
+
+    let result
+    try {
+      result = await AIModel(contextForModel, practiceOption, fullPrompt)
+    } catch (e) {
+      // GROQ_KEY or AIModel error — fallback to Gemini for feedback generation
+      // Keep response shape similar to AIModel result
+      const geminiResp = await callGemini(fullPrompt)
+      result = { success: !!geminiResp, response: geminiResp || null, error: e?.message || 'AIModel failed' }
+    }
     let feedbackArray
 
     if (result.success) {

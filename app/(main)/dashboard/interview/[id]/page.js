@@ -187,8 +187,7 @@ const InterviewPage = () => {
         await completeDiscussion(id, { feedback: feedbackResult.feedback || null, userId: discussionRoomData?.userId })
       }
 
-      // Optionally save conversation to Firestore. Remove this block if you also
-      // want to avoid saving history server-side.
+      
       if (conversationHistory && conversationHistory.length > 0) {
         await updateDoc(doc(db, 'discussionRooms', id), { conversation: conversationHistory })
       }

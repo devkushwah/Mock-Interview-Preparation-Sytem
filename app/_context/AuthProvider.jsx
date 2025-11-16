@@ -2,7 +2,7 @@
 
 import { useUser } from '@stackframe/stack'
 import React, { useEffect, useState, useRef } from 'react'
-import { UserContext } from './UserContext'; // Fixed import path
+import { UserContext } from './UserContext'; 
 import { createUser, getUserByEmail } from '@/services/firebase/userService';
 import { db } from '@/lib/firebaseConfig'
 import { doc, onSnapshot } from 'firebase/firestore'
@@ -26,7 +26,7 @@ const AuthProviderClient = ({ children }) => {
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [userData, setUserData] = useState(null);
   const hasCreatedUser = useRef(false);  // Prevent multiple calls
-  const unsubRef = useRef(null)          // <--- add
+  const unsubRef = useRef(null)          
 
   // console.log("User in AuthProvider:", user);
     
@@ -34,7 +34,7 @@ const AuthProviderClient = ({ children }) => {
     if (user && !hasCreatedUser.current && !userData) {
         console.log("User logged in:", user);
         CreateNewUser();
-        hasCreatedUser.current = true;  // Mark as created
+        hasCreatedUser.current = true;  
     } else if (!user) {
         console.log("No user logged in");
         hasCreatedUser.current = false;  // Reset on logout
