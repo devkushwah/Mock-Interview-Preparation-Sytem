@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import { getConversationHistory } from '@/services/firebase/chatService'
 import { db } from '@/lib/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
+import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 
 export default function InterviewEndDialog({ discussionRoomId, onClose }) {
   const [chatHistory, setChatHistory] = useState([])
@@ -82,7 +84,11 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
                             : 'bg-green-100 text-green-800'}`}
                       >
                         <strong>{chat.sender === 'user' ? 'You: ' : 'AI: '}</strong>
-                        {chat.message}
+                        <div className="mt-1 prose max-w-none text-sm sm:text-base">
+                          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                            {String(chat.message || '')}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -110,9 +116,23 @@ export default function InterviewEndDialog({ discussionRoomId, onClose }) {
                         ${fb.strength ? 'text-green-600' : 'text-red-600'}`}>
                         {fb.strength ? 'Strength' : 'Area for Improvement'}
                       </div>
-                      <div className="text-sm sm:text-base space-y-1">
-                        <div><strong>Point:</strong> {fb.point}</div>
-                        <div><strong>Feedback:</strong> {fb.feedback}</div>
+                      <div className="text-sm sm:text-base space-y-3">
+                        <div>
+                          <strong>Point:</strong>
+                          <div className="mt-1 prose max-w-none text-sm">
+                            <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                              {String(fb.point || '')}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                        <div>
+                          <strong>Feedback:</strong>
+                          <div className="mt-1 prose max-w-none text-sm">
+                            <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                              {String(fb.feedback || '')}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}

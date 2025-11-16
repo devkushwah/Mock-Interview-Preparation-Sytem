@@ -17,6 +17,7 @@ const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
   const { userData } = useContext(UserContext)
+  const [userCredits, setUserCredits] = useState(userData?.credit ?? null)
 
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -136,7 +137,24 @@ const InterviewPage = () => {
     return () => unsub()
   }, [id])
 
-  const hasCredits = (userData?.credit ?? 0) >= 500
+  const hasCredits = (userCredits ?? (userData?.credit ?? 0)) >= 500
+
+  // Keep a current credit count (fetch from server) so UI reflects real-time credits
+  useEffect(() => {
+    let mounted = true
+    if (!userData?.id) return
+    ;(async () => {
+      try {
+        const { getUserCredits } = await import('@/services/firebase/userService')
+        const c = await getUserCredits(userData.id)
+        if (mounted) setUserCredits(typeof c === 'number' ? c : 0)
+      } catch (e) {
+        console.warn('Failed to fetch user credits:', e)
+        if (mounted && userCredits === null) setUserCredits(userData?.credit ?? 0)
+      }
+    })()
+    return () => { mounted = false }
+  }, [userData?.id])
 
   const handleConnect = useCallback(async () => {
     if (!discussionRoomData) return
@@ -305,8 +323,6 @@ const InterviewPage = () => {
                        >
                          {isConnecting ? 'Connecting...' : 'Start Interview'}
                        </Button>
-                       
-                       {isOffline && <span className="text-xs text-red-600">You are offline</span>}
                      </div>
                    </div>
                  </div>

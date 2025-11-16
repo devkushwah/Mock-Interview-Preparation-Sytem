@@ -64,9 +64,12 @@ export async function POST(request) {
     }
 
     // Save user message
-    if (discussionRoomId) {
+    // Don't persist initial/system instruction prompts (start=true) into user-visible chat history.
+    // These are used only to generate the AI response.
+    if (discussionRoomId && !body.start) {
       await saveMessageToDiscussionRoom(discussionRoomId, 'user', message)
     }
+    
 
     const interviewerName = context?.interviewerName || 'an experienced interviewer'
     const practiceOption = context?.practiceOption || 'Mock Interview'
