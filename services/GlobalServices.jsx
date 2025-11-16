@@ -84,11 +84,42 @@ export const AIModel = async (topicOrContext, expertType, msg, modelOverride) =>
     // - regular => Gemini only
     // - pro => Groq (fallback Gemini on failure)
     if (tier !== 'pro') {
-      console.log('🔎 Model selection: tier != pro → using Gemini (regular).'); // log model choice
-      const geminiResponse = await callGemini(combinedPrompt);
-      if (!geminiResponse) throw new Error('Gemini returned empty response');
-      console.log('✅ Gemini response received (regular).');
-      return { success: true, response: geminiResponse };
+      console.log('🔎 Model selection: tier != pro → attempting Groq with GROQ_API_KEY_2 (regular).');
+      // Try Groq using GROQ_API_KEY_2 first, fallback to Gemini
+      if (process.env.GROQ_API_KEY_2) {
+        try {
+          const groqClientReg = new OpenAI({
+            baseURL: "https://api.groq.com/openai/v1",
+            apiKey: process.env.GROQ_API_KEY_2,
+          })
+
+          // Prefer groq-model from expert if it looks Groq-compatible, else fall back to a safe default
+          let regModel = option?.model && String(option.model).startsWith('groq/') ? option.model : "groq/compound-mini"
+
+          const completionReg = await retryWithBackoff(async () => {
+            return await groqClientReg.chat.completions.create({
+              model: regModel,
+              messages: [
+                { role: "system", content: resolvedPrompt },
+                { role: "user", content: msg },
+              ],
+            })
+          })
+
+          console.log('✅ Groq (regular) response received.')
+          return { success: true, response: completionReg.choices[0].message.content }
+        } catch (e) {
+          console.warn('⚠️ Groq (regular) failed or GROQ_API_KEY_2 invalid — falling back to Gemini:', e?.message || e)
+        }
+      } else {
+        console.warn('⚠️ GROQ_API_KEY_2 not set — falling back to Gemini (regular).')
+      }
+
+      // Gemini fallback
+      const geminiResponse = await callGemini(combinedPrompt)
+      if (!geminiResponse) throw new Error('Gemini returned empty response')
+      console.log('✅ Gemini response received (regular fallback).')
+      return { success: true, response: geminiResponse }
     }
 
     // Pro plan => Always Groq (ignore option.model to enforce policy)

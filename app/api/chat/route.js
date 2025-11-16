@@ -129,25 +129,35 @@ Candidate just said: "${message}"
 Respond as ${interviewerName}:`
 
     // Route by tier
-    let result
-    if (roomTier === 'regular') {
-      const geminiText = await callGemini(conversationPrompt)
-      if (!geminiText) {
-        return NextResponse.json({ error: 'Service busy, try again.' }, { status: 503 })
-      }
-      result = { success: true, response: geminiText }
-    } else {
-      // Pro => Qwen with expert prompt
+    // Use AIModel for both regular and pro on the server so GROQ_API_KEY_2 (server env) can be used for regular,
+    // with AIModel handling Groq -> Gemini fallback logic.
+    let result = null
+    try {
       result = await AIModel(
-        { topic, role, experience, tier: 'pro' },
+        { topic, role, experience, tier: roomTier },
         practiceOption,
-        message // Just send the user message, AIModel will handle system prompt
+        message // AIModel composes system prompt from ExpertsList
       )
+    } catch (e) {
+      console.warn('AIModel call failed:', e?.message || e)
+      result = null
     }
 
-    const aiText = result?.success 
-      ? result.response 
-      : "Sorry, I'm having trouble responding right now."
+    // If AIModel failed and this is regular tier, try a direct Gemini fallback using the prepared conversationPrompt
+    if ((!result || !result.success || !result.response) && roomTier === 'regular') {
+      try {
+        const geminiText = await callGemini(conversationPrompt)
+        if (geminiText) result = { success: true, response: geminiText, fallback: 'gemini' }
+      } catch (e) {
+        console.warn('Gemini fallback failed:', e?.message || e)
+      }
+    }
+
+    if (!result || !result.success || !result.response) {
+      return NextResponse.json({ error: 'Service busy, try again.' }, { status: 503 })
+    }
+
+    const aiText = result.response
 
     if (discussionRoomId) {
       await saveMessageToDiscussionRoom(discussionRoomId, 'assistant', aiText)
