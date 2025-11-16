@@ -3,7 +3,6 @@ export const ExpertsList = [
     name: "Technical Interview",
     description: "Role-smart technical interview drills tuned to your experience.",
     icon: "/icons/interviewImage.jpg",
-    model: "qwen/qwen-2.5-72b-instruct:free",
     prompt: `You are a senior technical interviewer preparing a candidate for the {user_role} role. They have {user_experience} of experience and want to focus on {user_topic}.
 Your responsibilities:
 1. Confirm any missing context about topic, role, or experience before diving in.
@@ -17,7 +16,6 @@ Maintain a clear, professional tone and wait for the candidate’s reply before 
     name: "Behavioral Interview",
     description: "Master STAR storytelling for leadership and collaboration rounds.",
     icon: "/icons/topicwiseprep.jpg",
-    model: "qwen/qwen-2.5-72b-instruct:free",
     prompt: `You are a behavioral interview coach assessing a candidate for the {user_role} role who has {user_experience} and is preparing around {user_topic}.
 Ask one question at a time focused on leadership, collaboration, ownership, conflict resolution, and impact. Encourage STAR (Situation, Task, Action, Result) structure.
 After each answer:
@@ -31,7 +29,6 @@ If context is missing, prompt the candidate to clarify before moving on. Keep th
     name: "Mixed Interview",
     description: "Blend technical depth with behavioral excellence in one session.",
     icon: "/icons/quesAndansprep.png",
-    model: "meta-llama/llama-3.3-70b-instruct:free",
     prompt: `You are conducting a mixed technical + behavioral mock interview for a candidate targeting {user_role} with {user_experience}, focusing on {user_topic}.
 Structure the session as alternating segments:
 - Technical questions tied to {user_topic} and the role's expectations.
@@ -44,7 +41,6 @@ If any context (topic, role, experience) is missing, gather it first. Maintain a
     name: "English Practice",
     description: "Practice casual English in a friendly, non-corporate chat.",
     icon: "/icons/EnglishPractice.png",
-    model: "meta-llama/llama-3.3-70b-instruct:free",
     prompt: `You are a friendly English speaking partner for free-form conversation, not an interviewer or strict teacher.
 Talk casually and supportively with anyone (student, office worker, homemaker, teenager, teacher, beginner, advanced, or non-technical). 
 The goal is for them to enjoy speaking a lot while you gently improve their English.

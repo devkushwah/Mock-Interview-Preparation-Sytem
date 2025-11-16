@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore'
 import { callGemini } from '@/services/geminiService'
 import { AIModel } from '@/services/GlobalServices'
-import { ExpertsList } from '@/services/options' // ✅ ADD THIS
+import { ExpertsList } from '@/services/options' 
 
 // Save message to subcollection: /discussionRooms/{roomId}/messages
 const saveMessageToDiscussionRoom = async (discussionRoomId, sender, message) => {

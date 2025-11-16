@@ -1,13 +1,14 @@
 import React from 'react';
 import OpenAI from 'openai';
 import { ExpertsList } from '@/services/options';
-import { callGemini } from '@/services/geminiService'; // Add this import for Gemini fallback
+import { callGemini } from '@/services/geminiService'; 
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_ROUTER_KEY,  // Note: Yeh backend mein move karo for security
-  dangerouslyAllowBrowser: true,  // Remove when moving to backend
-})
+// Remove the OpenRouter client setup since we're replacing Qwen with Groq
+// const openai = new OpenAI({
+//   baseURL: "https://openrouter.ai/api/v1",
+//   apiKey: process.env.NEXT_PUBLIC_OPENAI_ROUTER_KEY,  // Note: Yeh backend mein move karo for security
+//   dangerouslyAllowBrowser: true,  // Remove when moving to backend
+// })
 
 // Helper for exponential backoff retry
 const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
@@ -55,7 +56,7 @@ export const AIModel = async (topicOrContext, expertType, msg, modelOverride) =>
   let resolvedPrompt = '';
 
   try {
-    console.log('🤖 AIModel called with:', { topic, role, experience, expertType, msg, tier });
+    // debug logs removed
 
     const expertsArray = Array.isArray(ExpertsList) ? ExpertsList : [];
     if (expertsArray.length === 0) {
@@ -81,17 +82,39 @@ export const AIModel = async (topicOrContext, expertType, msg, modelOverride) =>
 
     // Force model by tier:
     // - regular => Gemini only
-    // - pro => Qwen via OpenRouter (fallback Gemini on failure)
+    // - pro => Groq (fallback Gemini on failure)
     if (tier !== 'pro') {
+      console.log('🔎 Model selection: tier != pro → using Gemini (regular).'); // log model choice
       const geminiResponse = await callGemini(combinedPrompt);
       if (!geminiResponse) throw new Error('Gemini returned empty response');
+      console.log('✅ Gemini response received (regular).');
       return { success: true, response: geminiResponse };
     }
 
-    // Pro plan -> Always Qwen (ignore option.model to enforce policy)
-    const model = modelOverride || "qwen/qwen-2.5-72b-instruct:free";
+    // Pro plan => Always Groq (ignore option.model to enforce policy)
+    // Check for API key before creating client
+    if (!process.env.GROQ_KEY) {
+      // GROQ key not available in this environment — fallback to Gemini automatically
+      // (keeps pro behavior working when GROQ_KEY isn't set)
+      const geminiResp = await callGemini(combinedPrompt);
+      if (!geminiResp) {
+        throw new Error('GROQ_KEY missing and Gemini fallback returned empty response');
+      }
+      return { success: true, response: geminiResp, fallback: 'gemini-no-groq-key' };
+    }
+    // Create a new OpenAI client for Groq
+    const groqClient = new OpenAI({
+      baseURL: "https://api.groq.com/openai/v1",
+      apiKey: process.env.GROQ_KEY,    });
+    // Model selection precedence: explicit override > expert config > default
+    let model = modelOverride || option?.model || "groq/compound-mini";
+    if (option?.model && !String(option.model).startsWith('groq/')) {
+      console.warn(`⚠️ Expert model "${option.model}" may not be Groq-compatible. Falling back to "${model}".`);
+      if (!String(model).startsWith('groq/')) model = modelOverride || "groq/compound-mini";
+    }
+    console.log(`🔎 Model selection: tier=pro → attempting Groq model "${model}".`);
     const completion = await retryWithBackoff(async () => {
-      return await openai.chat.completions.create({
+      return await groqClient.chat.completions.create({
         model,
         messages: [
           { role: "system", content: resolvedPrompt },
@@ -113,16 +136,18 @@ export const AIModel = async (topicOrContext, expertType, msg, modelOverride) =>
       error?.response?.status === 429;
 
     if (isRateLimited) {
-      console.warn('⚠️ OpenRouter rate limit; trying Gemini fallback.')
+      console.warn('⚠️ Groq rate limit; trying Gemini fallback.')
     } else {
-      console.error('❌ AIModel Error:', error)
+      console.error('❌ AIModel Error (Groq attempt):', error)
     }
 
     // Fallback: try Gemini once (keeps regular=Gemini rule; also helps pro on failure)
     try {
+      console.log('🔁 Falling back to Gemini for response (fallback from Groq).');
       const fallbackPrompt = `${resolvedPrompt || ''}\n\nUser message: ${msg}`;
       const geminiResponse = await callGemini(fallbackPrompt);
       if (geminiResponse) {
+        console.log('✅ Gemini fallback success.');
         return { success: true, response: geminiResponse };
       }
       throw new Error('Gemini fallback failed');
