@@ -227,6 +227,12 @@ const InterviewPage = () => {
     router.replace('/dashboard')
   }, [router])
 
+  useEffect(() => {
+    return () => {
+      disconnect()
+    }
+  }, [disconnect])
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
