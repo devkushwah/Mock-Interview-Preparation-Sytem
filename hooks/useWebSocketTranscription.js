@@ -5,6 +5,10 @@ import { useState, useRef, useCallback } from 'react'
 export const useWebSocketTranscription = (interviewContext, discussionRoomData, handleTranscriptReady, options = {}) => {
   const { startWithAI = false } = options
 
+  // ✅ TTS tuning (DECLARE ONCE)  <-- IMPORTANT: remove any duplicate declarations below
+  const TTS_IDLE_MS = 12000
+  const TTS_HARD_TIMEOUT_MS = 45000
+
   const [transcript, setTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [aiResponse, setAiResponse] = useState('')
@@ -24,13 +28,46 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const mediaRecorderRef = useRef(null)
   const audioContextRef = useRef(null)
   const audioChunksRef = useRef([])
+  const ttsStatsRef = useRef({ chunks: 0, bytes: 0, lastAudioAt: 0, lastControlAt: 0 })
+  const ttsFormatRef = useRef({ sampleRate: 48000, channels: 1, bitsPerSample: 16 })
+
+  // ✅ track TTS playback so ASR doesn’t process while AI is speaking
+  const isTtsPlayingRef = useRef(false)
+
+  // ✅ allow stopping currently playing audio on cleanup
+  const ttsAudioElRef = useRef(null)
+  const ttsAudioUrlRef = useRef(null)
+
+  const stopTtsPlayback = () => {
+    try {
+      isTtsPlayingRef.current = false
+      if (ttsAudioElRef.current) {
+        ttsAudioElRef.current.pause()
+        ttsAudioElRef.current.src = ''
+        ttsAudioElRef.current = null
+      }
+      if (ttsAudioUrlRef.current) {
+        URL.revokeObjectURL(ttsAudioUrlRef.current)
+        ttsAudioUrlRef.current = null
+      }
+    } catch {}
+  }
+
+  // ✅ utterance lifecycle + timers
+  const ttsUtteranceIdRef = useRef(0)
+  const ttsIdleTimerRef = useRef(null)
+  const ttsHardTimerRef = useRef(null)
+  const ttsIsFinalizingRef = useRef(false)
+  const ttsHasAudioRef = useRef(false)
+  const ttsUtteranceStartedAtRef = useRef(0)
+
   const micStreamRef = useRef(null)
   const latestDiscussionRef = useRef(null)
   const disconnectingRef = useRef(false)
   const startedOnceRef = useRef(false)
   const asrConnIdRef = useRef(0)
 
-  // ✅ NEW: TTS reliability refs
+  // TTS reliability refs
   const pendingTtsTextRef = useRef(null)
   const ttsFlushTimeoutRef = useRef(null)
   const ttsConnIdRef = useRef(0)
@@ -41,7 +78,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const lastProcessedTranscriptRef = useRef('')
   const lastSpeechTimeRef = useRef(Date.now())
 
-  // ✅ add this ref to avoid TDZ
   const handleSpeechCompleteRef = useRef(() => {})
 
   const startSpeechRecognition = useCallback(() => {
@@ -76,24 +112,24 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
       ws.onmessage = (event) => {
         if (asrConnIdRef.current !== myId) return
-        const data = JSON.parse(event.data)
 
+        // ✅ ignore ASR events while AI TTS audio is playing
+        if (isTtsPlayingRef.current) return
+
+        const data = JSON.parse(event.data)
         if (data.channel?.alternatives?.[0]) {
           const t = data.channel.alternatives[0].transcript
           if (data.is_final && t.trim()) {
             setTranscript((accumulatedTranscriptRef.current + ' ' + t).trim())
             setInterimTranscript('')
             lastSpeechTimeRef.current = Date.now()
-            // ✅ use ref (prevents TDZ error)
             handleSpeechCompleteRef.current(t, room)
           } else if (t) {
             lastSpeechTimeRef.current = Date.now()
             setInterimTranscript(t)
           }
         }
-        if (data.type === 'UtteranceEnd') {
-          console.log('🔇 Utterance ended - user paused speaking')
-        }
+        if (data.type === 'UtteranceEnd') console.log('🔇 Utterance ended - user paused speaking')
       }
 
       ws.onerror = (e) => {
@@ -121,9 +157,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       setError('Failed to start recognition: ' + (e?.message || 'Unknown error'))
       setIsConnecting(false)
     }
-  }, []) // ✅ IMPORTANT: do NOT depend on handleSpeechComplete
+  }, [])
 
-  // ✅ helpers must exist BEFORE initializeTTSConnection uses them
   const sanitizeForTTS = (text = '') => {
     let t = String(text)
     t = t.replace(/```[\s\S]*?```/g, '')
@@ -131,111 +166,287 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     return t.trim()
   }
 
-  const playAudioChunks = useCallback(async () => {
+  const base64ToUint8Array = (base64 = '') => {
     try {
-      // if only header/no audio, don't get stuck
-      if (!audioChunksRef.current || audioChunksRef.current.length <= 1) {
+      const bin = atob(base64)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      return bytes
+    } catch {
+      console.warn('TTS: failed to decode base64 audio chunk')
+      return null
+    }
+  }
+
+  const createWavHeader = ({ sampleRate, channels, bitsPerSample }, dataBytes) => {
+    const blockAlign = channels * (bitsPerSample / 8)
+    const byteRate = sampleRate * blockAlign
+    const buffer = new ArrayBuffer(44)
+    const view = new DataView(buffer)
+    const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)) }
+
+    writeStr(0, 'RIFF')
+    view.setUint32(4, 36 + dataBytes, true)
+    writeStr(8, 'WAVE')
+    writeStr(12, 'fmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true)
+    view.setUint16(22, channels, true)
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, byteRate, true)
+    view.setUint16(32, blockAlign, true)
+    view.setUint16(34, bitsPerSample, true)
+    writeStr(36, 'data')
+    view.setUint32(40, dataBytes, true)
+    return new Uint8Array(buffer)
+  }
+
+  const ttsStartAsrTimerRef = useRef(null)
+  const ttsActiveUtteranceIdRef = useRef(0)
+
+  const clearTtsTimers = () => {
+    if (ttsIdleTimerRef.current) { clearTimeout(ttsIdleTimerRef.current); ttsIdleTimerRef.current = null }
+    if (ttsHardTimerRef.current) { clearTimeout(ttsHardTimerRef.current); ttsHardTimerRef.current = null }
+    if (ttsStartAsrTimerRef.current) { clearTimeout(ttsStartAsrTimerRef.current); ttsStartAsrTimerRef.current = null }
+  }
+
+  const ttsAudioMimeRef = useRef('audio/wav')
+
+  const playAudioFromChunks = useCallback(async (chunksSnapshot, onEnded) => {
+    try {
+      if (!chunksSnapshot || chunksSnapshot.length === 0) {
         console.warn('TTS: no audio payload received.')
         setIsAiProcessing(false)
+        if (typeof onEnded === 'function') onEnded()
         return
       }
 
-      const totalLength = audioChunksRef.current.reduce((acc, chunk) => acc + chunk.length, 0)
+      // stop any previous playback
+      stopTtsPlayback()
+
+      const totalLength = chunksSnapshot.reduce((acc, c) => acc + c.length, 0)
       const combined = new Uint8Array(totalLength)
       let offset = 0
-      for (const chunk of audioChunksRef.current) {
+      for (const chunk of chunksSnapshot) {
         combined.set(chunk, offset)
         offset += chunk.length
       }
 
-      const audioBlob = new Blob([combined], { type: 'audio/wav' })
-      const url = URL.createObjectURL(audioBlob)
-      const audio = new Audio(url)
+      const looksLikeWav =
+        combined.length >= 12 &&
+        combined[0] === 0x52 && combined[1] === 0x49 && combined[2] === 0x46 && combined[3] === 0x46 &&
+        combined[8] === 0x57 && combined[9] === 0x41 && combined[10] === 0x56 && combined[11] === 0x45
 
-      audio.onended = () => {
-        URL.revokeObjectURL(url)
-        setIsAiProcessing(false)
+      let payloadBytes = combined
+      let mime = ttsAudioMimeRef.current || 'audio/wav'
+
+      if (!looksLikeWav) {
+        const fmt = ttsFormatRef.current || { sampleRate: 48000, channels: 1, bitsPerSample: 16 }
+        const header = createWavHeader(fmt, combined.length)
+        const wav = new Uint8Array(header.length + combined.length)
+        wav.set(header, 0)
+        wav.set(combined, header.length)
+        payloadBytes = wav
+        mime = 'audio/wav'
       }
 
-      audio.onerror = () => {
-        URL.revokeObjectURL(url)
+      const audioBlob = new Blob([payloadBytes], { type: mime })
+      const url = URL.createObjectURL(audioBlob)
+      ttsAudioUrlRef.current = url
+
+      const audio = new Audio(url)
+      ttsAudioElRef.current = audio
+
+      isTtsPlayingRef.current = true
+
+      audio.onended = () => {
+        stopTtsPlayback()
         setIsAiProcessing(false)
+        if (typeof onEnded === 'function') onEnded()
+      }
+
+      audio.onerror = (e) => {
+        console.error('TTS: audio element error', e)
+        stopTtsPlayback()
+        setIsAiProcessing(false)
+        if (typeof onEnded === 'function') onEnded()
       }
 
       await audio.play()
-
-      // keep only header for next playback
-      audioChunksRef.current = [audioChunksRef.current[0]]
     } catch (e) {
       console.error('Error playing TTS audio:', e)
+      stopTtsPlayback()
       setIsAiProcessing(false)
+      if (typeof onEnded === 'function') onEnded()
     }
   }, [])
 
-  // ---- TTS WebSocket ----
+  const finalizeTTS = useCallback((utteranceId, reason = 'unknown') => {
+    if (ttsActiveUtteranceIdRef.current !== utteranceId) return
+    if (ttsIsFinalizingRef.current) return
+
+    ttsIsFinalizingRef.current = true
+    try {
+      clearTtsTimers()
+
+      if (ttsFlushTimeoutRef.current) {
+        clearTimeout(ttsFlushTimeoutRef.current)
+        ttsFlushTimeoutRef.current = null
+      }
+
+      const snapshot = audioChunksRef.current?.slice?.() || []
+      audioChunksRef.current = []
+
+      console.log('TTS finalized:', {
+        reason,
+        chunks: snapshot.length,
+        bytes: snapshot.reduce((a, c) => a + c.length, 0),
+      })
+
+      ttsActiveUtteranceIdRef.current = 0
+      ttsHasAudioRef.current = false
+      ttsUtteranceStartedAtRef.current = 0
+
+      playAudioFromChunks(snapshot, () => {
+        // optional: ASR already running; keep as-is
+        if (startWithAI && !startedOnceRef.current) {
+          startedOnceRef.current = true
+          startSpeechRecognition()
+        }
+      })
+    } finally {
+      ttsIsFinalizingRef.current = false
+    }
+  }, [clearTtsTimers, playAudioFromChunks, startWithAI, startSpeechRecognition])
+
+  const scheduleTtsIdleFinalize = useCallback((utteranceId, idleMs = TTS_IDLE_MS) => {
+    if (ttsIdleTimerRef.current) clearTimeout(ttsIdleTimerRef.current)
+    ttsIdleTimerRef.current = setTimeout(() => {
+      if (ttsActiveUtteranceIdRef.current !== utteranceId) return
+      if (!ttsHasAudioRef.current) return
+      const last = ttsStatsRef.current.lastAudioAt || 0
+      if (!last) return
+      if (Date.now() - last >= idleMs) finalizeTTS(utteranceId, 'idle-gap')
+    }, idleMs)
+  }, [finalizeTTS])
+
   const initializeTTSConnection = useCallback(() => {
     try {
       const myTtsId = ++ttsConnIdRef.current
 
-      const ttsUrl = `wss://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=linear16&sample_rate=48000`
-      ttsWsRef.current = new WebSocket(ttsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
+      const dgKey = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY
+      if (!dgKey) {
+        console.error('TTS: NEXT_PUBLIC_DEEPGRAM_API_KEY missing')
+        setError('TTS disabled: missing NEXT_PUBLIC_DEEPGRAM_API_KEY')
+        setIsAiProcessing(false)
+        return
+      }
 
-      // Minimal WAV header
-      const wavHeader = new Uint8Array([
-        0x52,0x49,0x46,0x46, 0x00,0x00,0x00,0x00, 0x57,0x41,0x56,0x45,
-        0x66,0x6D,0x74,0x20, 0x10,0x00,0x00,0x00, 0x01,0x00, 0x01,0x00,
-        0x80,0xBB,0x00,0x00, 0x00,0xEE,0x02,0x00, 0x02,0x00, 0x10,0x00,
-        0x64,0x61,0x74,0x61, 0x00,0x00,0x00,0x00
-      ])
+      ttsAudioMimeRef.current = 'audio/wav'
+      const ttsUrl = `wss://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=linear16&sample_rate=48000`
+      ttsWsRef.current = new WebSocket(ttsUrl, ['token', dgKey])
+      ttsWsRef.current.binaryType = 'arraybuffer'
 
       ttsWsRef.current.onopen = () => {
         if (ttsConnIdRef.current !== myTtsId) return
         console.log('TTS WebSocket connected')
-        audioChunksRef.current = [wavHeader]
 
-        // ✅ If intro/response was generated before socket opened, send it now
+        audioChunksRef.current = []
+        ttsStatsRef.current = { chunks: 0, bytes: 0, lastAudioAt: 0, lastControlAt: Date.now() }
+        ttsHasAudioRef.current = false
+        ttsUtteranceStartedAtRef.current = 0
+
         if (pendingTtsTextRef.current) {
           const clean = pendingTtsTextRef.current
           pendingTtsTextRef.current = null
-          try {
-            ttsWsRef.current.send(JSON.stringify({ type: 'Speak', text: clean }))
-            ttsWsRef.current.send(JSON.stringify({ type: 'Flush' }))
-          } catch (e) {
-            console.error('Failed to send pending TTS text:', e)
+
+          const utteranceId = ++ttsUtteranceIdRef.current
+          ttsActiveUtteranceIdRef.current = utteranceId
+          ttsUtteranceStartedAtRef.current = Date.now()
+
+          clearTtsTimers()
+          audioChunksRef.current = []
+          ttsStatsRef.current = { chunks: 0, bytes: 0, lastAudioAt: 0, lastControlAt: Date.now() }
+
+          console.log('TTS → sending Speak/Flush', { chars: clean.length })
+          ttsWsRef.current.send(JSON.stringify({ type: 'Speak', text: clean }))
+          ttsWsRef.current.send(JSON.stringify({ type: 'Flush' }))
+
+          // fallback only if no audio ever arrives
+          if (ttsStartAsrTimerRef.current) clearTimeout(ttsStartAsrTimerRef.current)
+          if (startWithAI && !startedOnceRef.current) {
+            ttsStartAsrTimerRef.current = setTimeout(() => {
+              if (!startedOnceRef.current && !ttsHasAudioRef.current) {
+                startedOnceRef.current = true
+                startSpeechRecognition()
+              }
+            }, 8000)
           }
+
+          ttsHardTimerRef.current = setTimeout(() => {
+            if (ttsActiveUtteranceIdRef.current !== utteranceId) return
+            finalizeTTS(utteranceId, 'hard-timeout')
+          }, TTS_HARD_TIMEOUT_MS)
         }
       }
 
       ttsWsRef.current.onmessage = async (event) => {
         if (ttsConnIdRef.current !== myTtsId) return
+        const utteranceId = ttsActiveUtteranceIdRef.current
+        if (!utteranceId) return
 
-        if (event.data instanceof Blob) {
-          const arrayBuffer = await event.data.arrayBuffer()
-          const audioData = new Uint8Array(arrayBuffer)
-          audioChunksRef.current.push(audioData)
+        if (event.data instanceof ArrayBuffer) {
+          const chunk = new Uint8Array(event.data)
+          audioChunksRef.current.push(chunk)
+          ttsStatsRef.current.chunks += 1
+          ttsStatsRef.current.bytes += chunk.length
+          ttsStatsRef.current.lastAudioAt = Date.now()
+          ttsHasAudioRef.current = true
+          scheduleTtsIdleFinalize(utteranceId, TTS_IDLE_MS)
           return
         }
 
-        try {
-          const data = JSON.parse(event.data)
-          if (data.type === 'Flushed') {
-            console.log('TTS Flushed - playing audio')
+        if (event.data instanceof Blob) {
+          const buf = await event.data.arrayBuffer()
+          const chunk = new Uint8Array(buf)
+          audioChunksRef.current.push(chunk)
+          ttsStatsRef.current.chunks += 1
+          ttsStatsRef.current.bytes += chunk.length
+          ttsStatsRef.current.lastAudioAt = Date.now()
+          ttsHasAudioRef.current = true
+          scheduleTtsIdleFinalize(utteranceId, TTS_IDLE_MS)
+          return
+        }
 
-            if (ttsFlushTimeoutRef.current) {
-              clearTimeout(ttsFlushTimeoutRef.current)
-              ttsFlushTimeoutRef.current = null
+        if (typeof event.data === 'string') {
+          ttsStatsRef.current.lastControlAt = Date.now()
+          try {
+            const data = JSON.parse(event.data)
+            const type = String(data?.type || '').toLowerCase()
+            if (type === 'metadata') {
+              const sr = Number(data?.sample_rate || data?.sampleRate)
+              if (Number.isFinite(sr) && sr > 0) ttsFormatRef.current = { ...ttsFormatRef.current, sampleRate: sr }
+              return
             }
-
-            setAiTtsReady(true)
-            playAudioChunks()
-
-            if (startWithAI && !startedOnceRef.current) {
-              startedOnceRef.current = true
-              startSpeechRecognition()
+            if (type === 'audio') {
+              const b64 = data?.data || data?.audio || data?.chunk
+              if (typeof b64 === 'string' && b64.length) {
+                const bytes = base64ToUint8Array(b64)
+                if (bytes) {
+                  audioChunksRef.current.push(bytes)
+                  ttsStatsRef.current.chunks += 1
+                  ttsStatsRef.current.bytes += bytes.length
+                  ttsStatsRef.current.lastAudioAt = Date.now()
+                  ttsHasAudioRef.current = true
+                  scheduleTtsIdleFinalize(utteranceId, TTS_IDLE_MS)
+                }
+              }
+              return
             }
-          }
-        } catch {
-          // non-JSON control messages
+            if (type === 'done' || type === 'completed' || type === 'complete' || type === 'flushed') {
+              finalizeTTS(utteranceId, type)
+            }
+          } catch {}
         }
       }
 
@@ -244,56 +455,54 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         console.error('TTS WebSocket error:', e)
       }
 
-      ttsWsRef.current.onclose = () => {
+      ttsWsRef.current.onclose = (evt) => {
         if (ttsConnIdRef.current !== myTtsId) return
-        console.log('TTS WebSocket closed')
+        console.log('TTS WebSocket closed', { code: evt?.code, reason: evt?.reason })
       }
     } catch (e) {
       console.error('Failed to initialize TTS connection:', e)
+      setIsAiProcessing(false)
     }
-  }, [playAudioChunks, startWithAI, startSpeechRecognition])
+  }, [clearTtsTimers, finalizeTTS, scheduleTtsIdleFinalize, startWithAI, startSpeechRecognition])
 
-  // Send text to TTS for streaming synthesis (now sanitized)
+  // ✅ WS-only sendTextToTTS (restored)
   const sendTextToTTS = useCallback((text) => {
     const clean = sanitizeForTTS(text)
-
-    // ✅ If socket isn't open yet, queue text so it won't get dropped
-    if (!ttsWsRef.current || ttsWsRef.current.readyState !== WebSocket.OPEN) {
-      pendingTtsTextRef.current = clean
-
-      // If socket is missing/closed, try to (re)open it
-      if (!ttsWsRef.current || ttsWsRef.current.readyState === WebSocket.CLOSED) {
-        initializeTTSConnection()
-      }
-
-      // Also avoid "AI speaking…" forever if flush never comes
-      if (ttsFlushTimeoutRef.current) clearTimeout(ttsFlushTimeoutRef.current)
-      ttsFlushTimeoutRef.current = setTimeout(() => {
-        console.warn('TTS: flush timeout — continuing.')
-        setIsAiProcessing(false)
-        if (startWithAI && !startedOnceRef.current) {
-          startedOnceRef.current = true
-          startSpeechRecognition()
-        }
-      }, 10000)
-
+    if (!clean) {
+      setIsAiProcessing(false)
       return
     }
 
-    // Normal path
+    setAiTtsReady(true)
+
+    // reset buffers for new utterance
+    audioChunksRef.current = []
+    ttsStatsRef.current = { chunks: 0, bytes: 0, lastAudioAt: 0, lastControlAt: Date.now() }
+    ttsHasAudioRef.current = false
+    ttsUtteranceStartedAtRef.current = Date.now()
+
+    // ensure ws open
+    if (!ttsWsRef.current || ttsWsRef.current.readyState !== WebSocket.OPEN) {
+      pendingTtsTextRef.current = clean
+      initializeTTSConnection()
+      return
+    }
+
+    const utteranceId = ++ttsUtteranceIdRef.current
+    ttsActiveUtteranceIdRef.current = utteranceId
+
+    clearTtsTimers()
+
+    console.log('TTS → sending Speak/Flush', { chars: clean.length })
     ttsWsRef.current.send(JSON.stringify({ type: 'Speak', text: clean }))
     ttsWsRef.current.send(JSON.stringify({ type: 'Flush' }))
 
-    if (ttsFlushTimeoutRef.current) clearTimeout(ttsFlushTimeoutRef.current)
-    ttsFlushTimeoutRef.current = setTimeout(() => {
-      console.warn('TTS: flush timeout — continuing.')
-      setIsAiProcessing(false)
-      if (startWithAI && !startedOnceRef.current) {
-        startedOnceRef.current = true
-        startSpeechRecognition()
-      }
-    }, 10000)
-  }, [initializeTTSConnection, startWithAI, startSpeechRecognition])
+    // hard timeout
+    ttsHardTimerRef.current = setTimeout(() => {
+      if (ttsActiveUtteranceIdRef.current !== utteranceId) return
+      finalizeTTS(utteranceId, 'hard-timeout')
+    }, TTS_HARD_TIMEOUT_MS)
+  }, [clearTtsTimers, finalizeTTS, initializeTTSConnection])
 
   // ---- AI messages ----
   const generateAIIntro = useCallback(async (room) => {
@@ -427,14 +636,23 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const cleanupConnections = useCallback(() => {
     disconnectingRef.current = true
 
+    // ✅ stop any in-flight playback
+    stopTtsPlayback()
+
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
-    // ✅ clear TTS pending/timeout
+    // ✅ clear TTS pending/timeout/timers
     pendingTtsTextRef.current = null
+    clearTtsTimers()
     if (ttsFlushTimeoutRef.current) {
       clearTimeout(ttsFlushTimeoutRef.current)
       ttsFlushTimeoutRef.current = null
     }
+
+    // ✅ reset TTS refs
+    ttsHasAudioRef.current = false
+    ttsUtteranceStartedAtRef.current = 0
+    ttsActiveUtteranceIdRef.current = 0
 
     if (wsRef.current) {
       try { wsRef.current.close() } catch {}
@@ -482,7 +700,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   const connect = useCallback(async (room) => {
     try {
-      // ✅ ensure clean slate (fixes "works once, fails second time")
       cleanupConnections()
 
       setIsConnecting(true)
@@ -492,31 +709,41 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       startedOnceRef.current = false
       asrConnIdRef.current = 0
 
-      initializeTTSConnection()
       micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true })
 
+      // ✅ Start ASR immediately so interview "starts" and UI becomes connected
+      startSpeechRecognition()
+
+      // ✅ Then play AI intro (ASR processing is ignored while TTS plays)
       if (startWithAI) {
-        await generateAIIntro(room) // ASR starts after first TTS flush
-      } else {
-        startSpeechRecognition()
+        await generateAIIntro(room)
       }
     } catch (error) {
       console.error('Failed to connect:', error)
       setError('Failed to connect: ' + (error?.message || 'Unknown error'))
       setIsConnecting(false)
     }
-  }, [cleanupConnections, initializeTTSConnection, startWithAI, generateAIIntro, startSpeechRecognition])
+  }, [cleanupConnections, startWithAI, generateAIIntro, startSpeechRecognition])
 
   const disconnect = useCallback(() => {
     disconnectingRef.current = true
+
+    // ✅ stop any in-flight playback
+    stopTtsPlayback()
+
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
-    // ✅ clear TTS pending/timeout
     pendingTtsTextRef.current = null
+    clearTtsTimers()
     if (ttsFlushTimeoutRef.current) {
       clearTimeout(ttsFlushTimeoutRef.current)
       ttsFlushTimeoutRef.current = null
     }
+
+    // ✅ reset TTS refs
+    ttsHasAudioRef.current = false
+    ttsUtteranceStartedAtRef.current = 0
+    ttsActiveUtteranceIdRef.current = 0
 
     if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
     if (ttsWsRef.current) {
