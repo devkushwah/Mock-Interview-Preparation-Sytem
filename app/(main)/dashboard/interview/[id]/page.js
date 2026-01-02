@@ -16,17 +16,8 @@ const InterviewEndDialog = dynamic(() => import('../../_components/InterviewEndD
 const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
-
-  // ✅ Guard: context can be null if provider isn't mounted
-  const userCtx = useContext(UserContext)
-  const userData = userCtx?.userData ?? null
-
+  const { userData } = useContext(UserContext)
   const [userCredits, setUserCredits] = useState(userData?.credit ?? null)
-
-  // ✅ keep credits in sync once context becomes available
-  useEffect(() => {
-    if (userData?.credit != null) setUserCredits(userData.credit)
-  }, [userData?.credit])
 
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
