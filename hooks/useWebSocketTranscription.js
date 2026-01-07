@@ -54,10 +54,39 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   // ✅ helpers must exist BEFORE initializeTTSConnection uses them
   const sanitizeForTTS = (text = '') => {
-    let t = String(text)
-    t = t.replace(/```[\s\S]*?```/g, '')
+    let t = String(text || '')
+
+    // Remove fenced code blocks + inline code
+    t = t.replace(/```[\s\S]*?```/g, ' ')
     t = t.replace(/`([^`]+)`/g, '$1')
-    return t.trim()
+
+    // Remove markdown images/links but keep visible text
+    t = t.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+
+    // Strip emphasis/formatting markers so TTS doesn't say "star star"
+    // **bold** or __bold__
+    t = t.replace(/(\*\*|__)(.*?)\1/g, '$2')
+    // *italic* or _italic_
+    t = t.replace(/(\*|_)(.*?)\1/g, '$2')
+    // ~~strike~~
+    t = t.replace(/~~(.*?)~~/g, '$1')
+
+    // Remove common markdown line prefixes (headings, quotes, list bullets)
+    t = t.replace(/^\s{0,3}#{1,6}\s+/gm, '')     // headings
+    t = t.replace(/^\s{0,3}>\s+/gm, '')          // blockquotes
+    t = t.replace(/^\s*([-*+])\s+/gm, '')        // bullets
+    t = t.replace(/^\s*\d+\.\s+/gm, '')          // numbered lists
+
+    // Strip simple HTML tags if any
+    t = t.replace(/<\/?[^>]+>/g, ' ')
+
+    // Remove any leftover standalone markdown control chars
+    t = t.replace(/[*_#>`]/g, ' ')
+
+    // Normalize whitespace
+    t = t.replace(/\s+/g, ' ').trim()
+    return t
   }
 
   const splitForTTS = (text = '', maxLen = 280) => {
