@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 export const useWebSocketTranscription = (interviewContext, discussionRoomData, handleTranscriptReady, options = {}) => {
   const { startWithAI = false } = options
@@ -35,14 +35,97 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const ttsFlushTimeoutRef = useRef(null)
   const ttsConnIdRef = useRef(0)
 
+  // ✅ NEW: mode switch
+  const ttsModeRef = useRef((process.env.NEXT_PUBLIC_TTS_MODE || 'ws').toLowerCase())
+
+  useEffect(() => {
+    console.log('[TTS] mode=', ttsModeRef.current)
+  }, [])
+
   // Speech accumulation
   const speechTimeoutRef = useRef(null)
   const accumulatedTranscriptRef = useRef('')
   const lastProcessedTranscriptRef = useRef('')
   const lastSpeechTimeRef = useRef(Date.now())
 
-  // ✅ add this ref to avoid TDZ
+  // ✅ function refs (TDZ / stale closures)
   const handleSpeechCompleteRef = useRef(() => {})
+  const startSpeechRecognitionRef = useRef(() => {})
+
+  // ✅ helpers must exist BEFORE initializeTTSConnection uses them
+  const sanitizeForTTS = (text = '') => {
+    let t = String(text)
+    t = t.replace(/```[\s\S]*?```/g, '')
+    t = t.replace(/`([^`]+)`/g, '$1')
+    return t.trim()
+  }
+
+  const splitForTTS = (text = '', maxLen = 280) => {
+    const t = String(text).trim()
+    if (!t) return []
+    if (t.length <= maxLen) return [t]
+
+    const sentences = t.split(/(?<=[.!?])\s+/)
+    const out = []
+    let cur = ''
+
+    for (const s of sentences) {
+      const next = cur ? `${cur} ${s}` : s
+      if (next.length <= maxLen) {
+        cur = next
+        continue
+      }
+      if (cur) out.push(cur)
+      // if single sentence is too big, hard-split by words
+      if (s.length > maxLen) {
+        const words = s.split(/\s+/)
+        let chunk = ''
+        for (const w of words) {
+          const cand = chunk ? `${chunk} ${w}` : w
+          if (cand.length <= maxLen) chunk = cand
+          else {
+            if (chunk) out.push(chunk)
+            chunk = w
+          }
+        }
+        cur = chunk
+      } else {
+        cur = s
+      }
+    }
+
+    if (cur) out.push(cur)
+    return out
+  }
+
+  const playAudioBlob = useCallback((blob) => {
+    return new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+
+        const cleanup = () => {
+          try { URL.revokeObjectURL(url) } catch {}
+        }
+
+        audio.onended = () => {
+          cleanup()
+          resolve(true)
+        }
+        audio.onerror = () => {
+          cleanup()
+          resolve(false)
+        }
+
+        audio.play().catch(() => {
+          cleanup()
+          resolve(false)
+        })
+      } catch {
+        resolve(false)
+      }
+    })
+  }, [])
 
   const startSpeechRecognition = useCallback(() => {
     try {
@@ -50,13 +133,17 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const room = latestDiscussionRef.current
       if (!stream || !room) return
 
-      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      if (
+        wsRef.current &&
+        (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
+      ) {
         console.log('ASR already running, skip start')
         return
       }
 
       const myId = ++asrConnIdRef.current
-      const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1500&vad_events=true&punctuate=true`
+      const wsUrl =
+        `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1500&vad_events=true&punctuate=true`
       const ws = new WebSocket(wsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
       wsRef.current = ws
 
@@ -84,7 +171,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
             setTranscript((accumulatedTranscriptRef.current + ' ' + t).trim())
             setInterimTranscript('')
             lastSpeechTimeRef.current = Date.now()
-            // ✅ use ref (prevents TDZ error)
             handleSpeechCompleteRef.current(t, room)
           } else if (t) {
             lastSpeechTimeRef.current = Date.now()
@@ -109,10 +195,12 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         setIsConnected(false)
         setHasStartedInterview(false)
         setIsConnecting(false)
+
+        // ✅ auto-reconnect guarded + ref call
         if (!disconnectingRef.current && micStreamRef.current) {
           setTimeout(() => {
             console.log('Reconnecting ASR…')
-            startSpeechRecognition()
+            startSpeechRecognitionRef.current?.()
           }, 400)
         }
       }
@@ -121,19 +209,13 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       setError('Failed to start recognition: ' + (e?.message || 'Unknown error'))
       setIsConnecting(false)
     }
-  }, []) // ✅ IMPORTANT: do NOT depend on handleSpeechComplete
+  }, [])
 
-  // ✅ helpers must exist BEFORE initializeTTSConnection uses them
-  const sanitizeForTTS = (text = '') => {
-    let t = String(text)
-    t = t.replace(/```[\s\S]*?```/g, '')
-    t = t.replace(/`([^`]+)`/g, '$1')
-    return t.trim()
-  }
+  // keep ref updated
+  startSpeechRecognitionRef.current = startSpeechRecognition
 
   const playAudioChunks = useCallback(async () => {
     try {
-      // if only header/no audio, don't get stuck
       if (!audioChunksRef.current || audioChunksRef.current.length <= 1) {
         console.warn('TTS: no audio payload received.')
         setIsAiProcessing(false)
@@ -163,8 +245,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       }
 
       await audio.play()
-
-      // keep only header for next playback
       audioChunksRef.current = [audioChunksRef.current[0]]
     } catch (e) {
       console.error('Error playing TTS audio:', e)
@@ -172,7 +252,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     }
   }, [])
 
-  // ---- TTS WebSocket ----
+  // ---- TTS WebSocket (ws mode) ----
   const initializeTTSConnection = useCallback(() => {
     try {
       const myTtsId = ++ttsConnIdRef.current
@@ -180,7 +260,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const ttsUrl = `wss://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=linear16&sample_rate=48000`
       ttsWsRef.current = new WebSocket(ttsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
 
-      // Minimal WAV header
       const wavHeader = new Uint8Array([
         0x52,0x49,0x46,0x46, 0x00,0x00,0x00,0x00, 0x57,0x41,0x56,0x45,
         0x66,0x6D,0x74,0x20, 0x10,0x00,0x00,0x00, 0x01,0x00, 0x01,0x00,
@@ -193,7 +272,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         console.log('TTS WebSocket connected')
         audioChunksRef.current = [wavHeader]
 
-        // ✅ If intro/response was generated before socket opened, send it now
         if (pendingTtsTextRef.current) {
           const clean = pendingTtsTextRef.current
           pendingTtsTextRef.current = null
@@ -229,9 +307,10 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
             setAiTtsReady(true)
             playAudioChunks()
 
+            // ✅ Start ASR after TTS is ready (first time only)
             if (startWithAI && !startedOnceRef.current) {
               startedOnceRef.current = true
-              startSpeechRecognition()
+              startSpeechRecognitionRef.current?.()
             }
           }
         } catch {
@@ -251,36 +330,72 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     } catch (e) {
       console.error('Failed to initialize TTS connection:', e)
     }
-  }, [playAudioChunks, startWithAI, startSpeechRecognition])
+  }, [playAudioChunks, startWithAI])
 
-  // Send text to TTS for streaming synthesis (now sanitized)
-  const sendTextToTTS = useCallback((text) => {
+  // Send text to TTS (ws OR http)
+  const sendTextToTTS = useCallback(async (text) => {
     const clean = sanitizeForTTS(text)
+    const mode = ttsModeRef.current
 
-    // ✅ If socket isn't open yet, queue text so it won't get dropped
+    if (mode === 'http') {
+      try {
+        const parts = splitForTTS(clean, 280)
+
+        for (const part of parts) {
+          const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: part }),
+          })
+
+          if (!res.ok) {
+            let detail = ''
+            try {
+              const j = await res.json()
+              detail = j?.error || ''
+            } catch {}
+            throw new Error(detail || `TTS HTTP failed (${res.status})`)
+          }
+
+          const blob = await res.blob()
+          const ok = await playAudioBlob(blob)
+          if (!ok) throw new Error('Audio playback failed')
+        }
+
+        setAiTtsReady(true)
+      } catch (e) {
+        console.warn('HTTP TTS failed:', e?.message || e)
+      } finally {
+        setIsAiProcessing(false)
+        if (startWithAI && !startedOnceRef.current) {
+          startedOnceRef.current = true
+          startSpeechRecognitionRef.current?.()
+        }
+      }
+      return
+    }
+
+    // --- ws mode (existing) ---
     if (!ttsWsRef.current || ttsWsRef.current.readyState !== WebSocket.OPEN) {
       pendingTtsTextRef.current = clean
 
-      // If socket is missing/closed, try to (re)open it
       if (!ttsWsRef.current || ttsWsRef.current.readyState === WebSocket.CLOSED) {
         initializeTTSConnection()
       }
 
-      // Also avoid "AI speaking…" forever if flush never comes
       if (ttsFlushTimeoutRef.current) clearTimeout(ttsFlushTimeoutRef.current)
       ttsFlushTimeoutRef.current = setTimeout(() => {
         console.warn('TTS: flush timeout — continuing.')
         setIsAiProcessing(false)
         if (startWithAI && !startedOnceRef.current) {
           startedOnceRef.current = true
-          startSpeechRecognition()
+          startSpeechRecognitionRef.current?.()
         }
       }, 10000)
 
       return
     }
 
-    // Normal path
     ttsWsRef.current.send(JSON.stringify({ type: 'Speak', text: clean }))
     ttsWsRef.current.send(JSON.stringify({ type: 'Flush' }))
 
@@ -290,10 +405,10 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       setIsAiProcessing(false)
       if (startWithAI && !startedOnceRef.current) {
         startedOnceRef.current = true
-        startSpeechRecognition()
+        startSpeechRecognitionRef.current?.()
       }
     }, 10000)
-  }, [initializeTTSConnection, startWithAI, startSpeechRecognition])
+  }, [initializeTTSConnection, playAudioBlob, startWithAI])
 
   // ---- AI messages ----
   const generateAIIntro = useCallback(async (room) => {
@@ -339,14 +454,14 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       setAiResponse(aiMessage)
       setConversationHistory(prev => [...prev, { role: 'assistant', content: aiMessage }])
 
-      // ✅ Safe now: will queue if TTS not ready yet
-      sendTextToTTS(aiMessage)
+      // ✅ ws/http handled inside
+      await sendTextToTTS(aiMessage)
     } catch (e) {
       console.error('Error generating AI intro:', e)
       const fallback = 'Hello! Let’s get started. Please introduce yourself briefly.'
       setAiResponse(fallback)
       setConversationHistory(prev => [...prev, { role: 'assistant', content: fallback }])
-      sendTextToTTS(fallback)
+      await sendTextToTTS(fallback)
     }
   }, [sendTextToTTS])
 
@@ -386,7 +501,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const assistantMessage = { role: 'assistant', content: aiMessage }
       setConversationHistory(prev => [...prev, userMessage, assistantMessage])
 
-      sendTextToTTS(aiMessage)
+      await sendTextToTTS(aiMessage)
 
       accumulatedTranscriptRef.current = ''
       lastProcessedTranscriptRef.current = completeTranscript
@@ -421,7 +536,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     }, 1500)
   }, [generateAIResponse])
 
-  // ✅ keep ref updated
   handleSpeechCompleteRef.current = handleSpeechComplete
 
   const cleanupConnections = useCallback(() => {
@@ -429,7 +543,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
-    // ✅ clear TTS pending/timeout
     pendingTtsTextRef.current = null
     if (ttsFlushTimeoutRef.current) {
       clearTimeout(ttsFlushTimeoutRef.current)
@@ -462,7 +575,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       audioContextRef.current = null
     }
 
-    // reset flags/state for a clean run
     setIsConnected(false)
     setHasStartedInterview(false)
     setAiTtsReady(false)
@@ -476,13 +588,11 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     lastProcessedTranscriptRef.current = ''
     lastSpeechTimeRef.current = Date.now()
 
-    // allow reconnect logic again
     setTimeout(() => { disconnectingRef.current = false }, 0)
   }, [])
 
   const connect = useCallback(async (room) => {
     try {
-      // ✅ ensure clean slate (fixes "works once, fails second time")
       cleanupConnections()
 
       setIsConnecting(true)
@@ -492,26 +602,30 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       startedOnceRef.current = false
       asrConnIdRef.current = 0
 
-      initializeTTSConnection()
+      if (ttsModeRef.current !== 'http') {
+        initializeTTSConnection()
+      } else {
+        setAiTtsReady(true)
+      }
+
       micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true })
 
       if (startWithAI) {
-        await generateAIIntro(room) // ASR starts after first TTS flush
+        await generateAIIntro(room)
       } else {
-        startSpeechRecognition()
+        startSpeechRecognitionRef.current?.()
       }
     } catch (error) {
       console.error('Failed to connect:', error)
       setError('Failed to connect: ' + (error?.message || 'Unknown error'))
       setIsConnecting(false)
     }
-  }, [cleanupConnections, initializeTTSConnection, startWithAI, generateAIIntro, startSpeechRecognition])
+  }, [cleanupConnections, initializeTTSConnection, startWithAI, generateAIIntro])
 
   const disconnect = useCallback(() => {
     disconnectingRef.current = true
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
-    // ✅ clear TTS pending/timeout
     pendingTtsTextRef.current = null
     if (ttsFlushTimeoutRef.current) {
       clearTimeout(ttsFlushTimeoutRef.current)
