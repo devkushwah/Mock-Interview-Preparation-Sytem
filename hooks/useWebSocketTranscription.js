@@ -40,8 +40,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     console.log('[TTS] mode=', ttsModeRef.current)
   }, [])
 
-  // ✅ UPDATED: 2 second pause detection
-  const SPEECH_PAUSE_THRESHOLD = 2000 // 2 seconds
+  // ✅ 2 second pause detection
+  const SPEECH_PAUSE_THRESHOLD = 2000
   const MIN_WORDS_FOR_RESPONSE = 5
 
   // Speech accumulation
@@ -53,12 +53,19 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const handleSpeechCompleteRef = useRef(() => {})
   const startSpeechRecognitionRef = useRef(() => {})
 
+  // ✅ Enhanced sanitization for TTS
   const sanitizeForTTS = (text = '') => {
     let t = String(text || '')
+    
+    // Remove code blocks
     t = t.replace(/```[\s\S]*?```/g, ' ')
     t = t.replace(/`([^`]+)`/g, '$1')
+    
+    // Remove markdown images and links
     t = t.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
     t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    
+    // Remove markdown formatting
     t = t.replace(/(\*\*|__)(.*?)\1/g, '$2')
     t = t.replace(/(\*|_)(.*?)\1/g, '$2')
     t = t.replace(/~~(.*?)~~/g, '$1')
@@ -66,9 +73,31 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     t = t.replace(/^\s{0,3}>\s+/gm, '')
     t = t.replace(/^\s*([-*+])\s+/gm, '')
     t = t.replace(/^\s*\d+\.\s+/gm, '')
+    
+    // Remove HTML tags
     t = t.replace(/<\/?[^>]+>/g, ' ')
+    
+    // Replace special unicode characters with ASCII equivalents
+    t = t.replace(/['']/g, "'")
+    t = t.replace(/[""]/g, '"')
+    t = t.replace(/[—–]/g, '-')
+    t = t.replace(/[‑]/g, '-')
+    t = t.replace(/…/g, '...')
+    t = t.replace(/[‐‒―]/g, '-')
+    t = t.replace(/[•]/g, '')
+    t = t.replace(/[\u2018-\u201F]/g, "'")
+    t = t.replace(/[\u2010-\u2015]/g, '-')
+    
+    // Remove zero-width and control characters
+    t = t.replace(/[\u200B-\u200D\uFEFF]/g, '')
+    t = t.replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    
+    // Clean up markdown symbols
     t = t.replace(/[*_#>`]/g, ' ')
-    t = t.replace(/\s+/g, ' ').trim()
+    
+    // Normalize whitespace
+    t = t.replace(/[\s\u00A0]+/g, ' ').trim()
+    
     return t
   }
 
@@ -153,7 +182,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       }
 
       const myId = ++asrConnIdRef.current
-      // ✅ UPDATED: 2000ms utterance_end_ms
       const wsUrl =
         `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=2000&vad_events=true&punctuate=true`
       const ws = new WebSocket(wsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
@@ -538,7 +566,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     }
   }, [sendTextToTTS, isAiProcessing])
 
-  // ✅ UPDATED: 2 second pause detection
   const handleSpeechComplete = useCallback((finalTranscript, room) => {
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
@@ -661,48 +688,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   }, [cleanupConnections, initializeTTSConnection, startWithAI, generateAIIntro])
 
   const disconnect = useCallback(() => {
-    disconnectingRef.current = true
-    if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
-
-    pendingTtsTextRef.current = null
-    if (ttsFlushTimeoutRef.current) {
-      clearTimeout(ttsFlushTimeoutRef.current)
-      ttsFlushTimeoutRef.current = null
-    }
-
-    if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
-    if (ttsWsRef.current) {
-      try { ttsWsRef.current.send(JSON.stringify({ type: 'Close' })) } catch {}
-      try { ttsWsRef.current.close() } catch {}
-      ttsWsRef.current = null
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop() } catch {}
-    }
-    if (micStreamRef.current) {
-      try { micStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
-      micStreamRef.current = null
-    }
-    if (audioContextRef.current) {
-      try { audioContextRef.current.close() } catch {}
-      audioContextRef.current = null
-    }
-
-    setIsConnected(false)
-    setHasStartedInterview(false)
-    setAiTtsReady(false)
-    setIsAiProcessing(false)
-    setTranscript('')
-    setInterimTranscript('')
-    setAiResponse('')
-    setConversationHistory([])
-    audioChunksRef.current = []
-    accumulatedTranscriptRef.current = ''
-    lastProcessedTranscriptRef.current = ''
-    lastSpeechTimeRef.current = Date.now()
-
-    setTimeout(() => { disconnectingRef.current = false }, 0)
-  }, [])
+    cleanupConnections()
+  }, [cleanupConnections])
 
   const clearTranscript = useCallback(() => {
     setTranscript('')
