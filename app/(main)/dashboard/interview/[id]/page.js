@@ -17,7 +17,10 @@ const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
   const { userData } = useContext(UserContext)
-  const [userCredits, setUserCredits] = useState(userData?.credit ?? null)
+  
+  // ✅ FIX: Proper credit state management
+  const [userCredits, setUserCredits] = useState(null) // null = loading
+  const [creditsLoading, setCreditsLoading] = useState(true)
 
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -137,24 +140,50 @@ const InterviewPage = () => {
     return () => unsub()
   }, [id])
 
-  const hasCredits = (userCredits ?? (userData?.credit ?? 0)) >= 500
-
-  // Keep a current credit count (fetch from server) so UI reflects real-time credits
+  // ✅ FIX: Proper credit fetching with loading state
   useEffect(() => {
     let mounted = true
-    if (!userData?.id) return
-    ;(async () => {
+    
+    const fetchCredits = async () => {
+      if (!userData?.id) {
+        setCreditsLoading(false)
+        return
+      }
+
       try {
+        setCreditsLoading(true)
         const { getUserCredits } = await import('@/services/firebase/userService')
-        const c = await getUserCredits(userData.id)
-        if (mounted) setUserCredits(typeof c === 'number' ? c : 0)
+        const credits = await getUserCredits(userData.id)
+        
+        if (mounted) {
+          const finalCredits = typeof credits === 'number' ? credits : (userData?.credit ?? 0)
+          setUserCredits(finalCredits)
+          console.log('💰 Credits loaded:', finalCredits)
+        }
       } catch (e) {
         console.warn('Failed to fetch user credits:', e)
-        if (mounted && userCredits === null) setUserCredits(userData?.credit ?? 0)
+        if (mounted) {
+          setUserCredits(userData?.credit ?? 0)
+        }
+      } finally {
+        if (mounted) {
+          setCreditsLoading(false)
+        }
       }
-    })()
-    return () => { mounted = false }
-  }, [userData?.id])
+    }
+
+    fetchCredits()
+
+    return () => {
+      mounted = false
+    }
+  }, [userData?.id, userData?.credit])
+
+  // ✅ FIX: Proper hasCredits calculation
+  const hasCredits = useMemo(() => {
+    if (creditsLoading || userCredits === null) return false
+    return userCredits >= 500
+  }, [userCredits, creditsLoading])
 
   const handleConnect = useCallback(async () => {
     if (!discussionRoomData) return
@@ -205,7 +234,6 @@ const InterviewPage = () => {
         await completeDiscussion(id, { feedback: feedbackResult.feedback || null, userId: discussionRoomData?.userId })
       }
 
-      
       if (conversationHistory && conversationHistory.length > 0) {
         await updateDoc(doc(db, 'discussionRooms', id), { conversation: conversationHistory })
       }
@@ -233,12 +261,15 @@ const InterviewPage = () => {
     }
   }, [disconnect])
 
-  if (loading) {
+  // ✅ FIX: Show loading while credits are being fetched
+  if (loading || creditsLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto"></div>
-          <p className="text-sm text-slate-600">Loading interview...</p>
+          <p className="text-sm text-slate-600">
+            {loading ? 'Loading interview...' : 'Checking credits...'}
+          </p>
         </div>
       </div>
     )
@@ -268,106 +299,125 @@ const InterviewPage = () => {
       {/* Header */}
       <div className="sticky top-0 z-10 backdrop-blur bg-white/70 border-b">
         <div className="mx-auto max-w-4xl px-4 md:px-6 py-3">
-           <div className="flex items-center justify-between">
-             <div className="min-w-0">
-               <h1 className="text-base md:text-xl font-semibold tracking-tight text-slate-900">
-                 {discussionRoomData?.topic || 'Technical Interview'}
-                 <span className="mx-2 text-slate-400">•</span>
-                 <span className="text-slate-600">{discussionRoomData?.practiceOption || 'Interview'}</span>
-               </h1>
-               <div className="mt-1 flex items-center gap-3 text-xs text-slate-600">
-                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset ${hasStartedInterview ? 'bg-red-50 text-red-600 ring-red-200' : 'bg-slate-100 text-slate-600 ring-slate-200'}`}>
-                   <span className={`h-2 w-2 rounded-full ${hasStartedInterview ? 'bg-red-500 animate-pulse' : 'bg-slate-400'}`}></span>
-                   {hasStartedInterview ? 'Recording' : 'Waiting'}
-                 </span>
-                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 ring-1 ring-slate-200">
-                   <Clock className="h-3 w-3" />
-                   <span className="font-mono">{formatTime(elapsedTime)}</span>
-                 </span>
-                 {!isOffline && <span className="hidden sm:inline-flex items-center gap-1 text-emerald-600"><Zap className="h-3 w-3" />Live</span>}
-               </div>
-             </div>
- 
-             <Button
-               variant="destructive"
-               size="sm"
-               onClick={handleEndInterview}
-               disabled={!hasStartedInterview || isEndingInterview}
-               className="rounded-full shadow-sm"
-             >
-               <MicOff className="mr-1 h-4 w-4" />
-               End
-             </Button>
-           </div>
-         </div>
-       </div>
- 
-       {/* Main */}
-       <main className="flex-1">
-         {!hasStartedInterview ? (
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <h1 className="text-base md:text-xl font-semibold tracking-tight text-slate-900">
+                {discussionRoomData?.topic || 'Technical Interview'}
+                <span className="mx-2 text-slate-400">•</span>
+                <span className="text-slate-600">{discussionRoomData?.practiceOption || 'Interview'}</span>
+              </h1>
+              <div className="mt-1 flex items-center gap-3 text-xs text-slate-600">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset ${hasStartedInterview ? 'bg-red-50 text-red-600 ring-red-200' : 'bg-slate-100 text-slate-600 ring-slate-200'}`}>
+                  <span className={`h-2 w-2 rounded-full ${hasStartedInterview ? 'bg-red-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                  {hasStartedInterview ? 'Recording' : 'Waiting'}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 ring-1 ring-slate-200">
+                  <Clock className="h-3 w-3" />
+                  <span className="font-mono">{formatTime(elapsedTime)}</span>
+                </span>
+                {!isOffline && <span className="hidden sm:inline-flex items-center gap-1 text-emerald-600"><Zap className="h-3 w-3" />Live</span>}
+                {/* ✅ NEW: Show credit count */}
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 ring-1 ring-amber-200 text-amber-700">
+                  💰 {userCredits ?? 0}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleEndInterview}
+              disabled={!hasStartedInterview || isEndingInterview}
+              className="rounded-full shadow-sm"
+            >
+              <MicOff className="mr-1 h-4 w-4" />
+              End
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <main className="flex-1">
+        {!hasStartedInterview ? (
           // Centered start card
           <section className="mx-auto max-w-4xl px-4 md:px-6 py-10 md:py-14">
             <div className="mx-auto w-full max-w-3xl">
               <div className="relative overflow-hidden rounded-3xl ring-1 ring-slate-200/60 bg-gradient-to-br from-white to-blue-50/60 p-8 md:p-10 shadow-lg">
-                   <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-blue-100 blur-3xl"></div>
-                   <div className="relative">
-                     <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200">
-                       <Mic className="h-3.5 w-3.5" /> Voice Interview
-                     </div>
-                     <h2 className="mt-3 text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
-                       Ready to start your mock interview?
-                     </h2>
-                     <p className="mt-2 text-slate-600">
-                       The AI will greet you first and then start recording your answers automatically.
-                     </p>
-                    <div className="mt-6 flex flex-wrap items-center gap-3">
-                       <Button
-                         onClick={handleConnect}
-                         disabled={isConnecting || !discussionRoomData || !hasCredits || isOffline}
-                         size="lg"
-                         className="rounded-full bg-blue-600 hover:bg-blue-700 shadow-sm"
-                       >
-                         {isConnecting ? 'Connecting...' : 'Start Interview'}
-                       </Button>
-                     </div>
-                   </div>
-                 </div>
-             </div>
-           </section>
-         ) : (
-           // Centered in-progress card
-           <section className="mx-auto max-w-4xl px-4 md:px-6 py-10 md:py-14">
-             <div className="mx-auto w-full max-w-3xl">
+                <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-blue-100 blur-3xl"></div>
+                <div className="relative">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200">
+                    <Mic className="h-3.5 w-3.5" /> Voice Interview
+                  </div>
+                  <h2 className="mt-3 text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
+                    Ready to start your mock interview?
+                  </h2>
+                  <p className="mt-2 text-slate-600">
+                    The AI will greet you first and then start recording your answers automatically.
+                  </p>
+                  
+                  {/* ✅ NEW: Show credit warning if insufficient */}
+                  {!hasCredits && (
+                    <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                      ⚠️ You need at least 500 credits to start. Current: {userCredits ?? 0}
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={handleConnect}
+                      disabled={isConnecting || !discussionRoomData || !hasCredits || isOffline}
+                      size="lg"
+                      className="rounded-full bg-blue-600 hover:bg-blue-700 shadow-sm disabled:opacity-50"
+                    >
+                      {isConnecting ? 'Connecting...' : 'Start Interview'}
+                    </Button>
+                    
+                    {/* ✅ NEW: Debug info (remove in production) */}
+                    <div className="text-xs text-slate-500">
+                      Credits: {userCredits ?? 'loading'} | 
+                      Has: {hasCredits ? '✅' : '❌'} | 
+                      Loading: {creditsLoading ? '⏳' : '✅'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          // Centered in-progress card
+          <section className="mx-auto max-w-4xl px-4 md:px-6 py-10 md:py-14">
+            <div className="mx-auto w-full max-w-3xl">
               <div className="rounded-3xl ring-1 ring-slate-200/60 bg-white/95 p-8 md:p-10 shadow-lg">
-                   <div className="flex items-center justify-between">
-                     <div>
-                       <h2 className="text-xl font-semibold text-slate-900">Interview in progress</h2>
-                       <p className="mt-1 text-sm text-slate-500">
-                         {isAiProcessing ? 'AI is speaking…' : 'Listening for your response'}
-                       </p>
-                     </div>
-                     <div className="flex items-end gap-1 h-8">
-                       <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1s_ease-in-out_infinite] h-5"></span>
-                       <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1.2s_ease-in-out_infinite] h-7"></span>
-                       <span className="w-1.5 rounded bg-blue-500 animate-[pulse_0.9s_ease-in-out_infinite] h-4"></span>
-                       <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1.1s_ease-in-out_infinite] h-6"></span>
-                     </div>
-                   </div>
-                  <div className="mt-6 grid grid-cols-2 gap-3 text-xs text-slate-500">
-                    <div className="rounded-lg ring-1 ring-slate-200 p-3 bg-white">
-                       <div className="font-medium text-slate-700">Status</div>
-                       <div>{isAiProcessing ? 'Speaking' : 'Listening'}</div>
-                     </div>
-                    <div className="rounded-lg ring-1 ring-slate-200 p-3 bg-white">
-                       <div className="font-medium text-slate-700">Elapsed</div>
-                       <div className="font-mono">{formatTime(elapsedTime)}</div>
-                     </div>
-                   </div>
-                 </div>
-             </div>
-           </section>
-         )}
-       </main>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">Interview in progress</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {isAiProcessing ? 'AI is speaking…' : 'Listening for your response'}
+                    </p>
+                  </div>
+                  <div className="flex items-end gap-1 h-8">
+                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1s_ease-in-out_infinite] h-5"></span>
+                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1.2s_ease-in-out_infinite] h-7"></span>
+                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_0.9s_ease-in-out_infinite] h-4"></span>
+                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1.1s_ease-in-out_infinite] h-6"></span>
+                  </div>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                  <div className="rounded-lg ring-1 ring-slate-200 p-3 bg-white">
+                    <div className="font-medium text-slate-700">Status</div>
+                    <div>{isAiProcessing ? 'Speaking' : 'Listening'}</div>
+                  </div>
+                  <div className="rounded-lg ring-1 ring-slate-200 p-3 bg-white">
+                    <div className="font-medium text-slate-700">Elapsed</div>
+                    <div className="font-mono">{formatTime(elapsedTime)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
 
       {/* End Dialog */}
       {isEndingInterview && (
