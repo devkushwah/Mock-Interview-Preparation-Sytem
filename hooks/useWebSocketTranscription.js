@@ -138,11 +138,15 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     return out
   }
 
+  // ✅ SLOWER playback with 0.85x speed
   const playAudioBlob = useCallback((blob) => {
     return new Promise((resolve) => {
       try {
         const url = URL.createObjectURL(blob)
         const audio = new Audio(url)
+
+        // 🔥 SLOW DOWN TO 85% SPEED FOR CLEARER SPEECH
+        audio.playbackRate = 0.85
 
         const cleanup = () => {
           try { URL.revokeObjectURL(url) } catch {}
@@ -278,6 +282,9 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const url = URL.createObjectURL(audioBlob)
       const audio = new Audio(url)
 
+      // 🔥 SLOW DOWN TO 85% SPEED
+      audio.playbackRate = 0.85
+
       audio.onended = () => {
         URL.revokeObjectURL(url)
         setIsAiProcessing(false)
@@ -412,10 +419,17 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
           throw new Error('All TTS chunks failed')
         }
 
-        for (const { blob } of blobs) {
+        // 🔥 ADD 300ms PAUSE BETWEEN CHUNKS
+        for (let i = 0; i < blobs.length; i++) {
+          const { blob } = blobs[i]
           const success = await playAudioBlob(blob)
           if (!success) {
             console.warn('Audio playback failed for chunk, continuing...')
+          }
+          
+          // Add natural pause between chunks (except last one)
+          if (i < blobs.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 300))
           }
         }
 
