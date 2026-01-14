@@ -13,11 +13,9 @@ export default function Page() {
   const redirectParam = searchParams?.get('redirect_url') || null
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // get global user state from AuthProvider
   const ctx = useContext(UserContext)
   const user = ctx?.userData
 
-  // navigate to dashboard if signed in, otherwise open Stack sign-in handler with redirect
   const handleGetStarted = () => {
     if (user) {
       router.push('/dashboard')
@@ -32,24 +30,20 @@ export default function Page() {
       <header className="w-full py-4 px-6 md:px-12 bg-gray-100 shadow-md flex justify-between items-center sticky top-0 z-50">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900">AI Mock Interview</h1>
 
-        {/* Desktop Nav - homepage: Features / Testimonials / Contact kept, increased gap */}
         <nav className="hidden md:flex gap-10 text-gray-700 font-medium">
-          <Link href="/" className="hover:text-indigo-600 px-2">Home</Link>
-          <a href="#features" className="hover:text-indigo-600 px-2">Features</a>
-          <a href="#testimonials" className="hover:text-indigo-600 px-2">Testimonials</a>
-          <a href="#contact" className="hover:text-indigo-600 px-2">Contact</a>
-          <Link href="/dashboard" className="hover:text-indigo-600 px-2">Dashboard</Link>
+          <Link href="/" className="hover:text-indigo-600 px-2 cursor-pointer">Home</Link>
+          <a href="#features" className="hover:text-indigo-600 px-2 cursor-pointer">Features</a>
+          <a href="#testimonials" className="hover:text-indigo-600 px-2 cursor-pointer">Testimonials</a>
+          <a href="#contact" className="hover:text-indigo-600 px-2 cursor-pointer">Contact</a>
+          <Link href="/dashboard" className="hover:text-indigo-600 px-2 cursor-pointer">Dashboard</Link>
         </nav>
 
-        {/* Right Side */}
         <div className="flex items-center gap-3">
-          {/* show UserButton when signed in */}
           {user ? <UserButton /> : null}
 
-          {/* Hamburger Menu (Mobile) */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="md:hidden ml-2 focus:outline-none"
+            className="md:hidden ml-2 focus:outline-none cursor-pointer"
             aria-label="menu"
           >
             <svg
@@ -68,14 +62,13 @@ export default function Page() {
           </button>
         </div>
 
-        {/* Mobile Nav (more spacing) */}
         {menuOpen && (
           <div className="absolute top-full left-0 w-full bg-white shadow-md flex flex-col items-center py-6 space-y-4 md:hidden z-40">
-            <Link href="/" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Home</Link>
-            <a href="#features" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Features</a>
-            <a href="#testimonials" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Testimonials</a>
-            <a href="#contact" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Contact</a>
-            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2">Dashboard</Link>
+            <Link href="/" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2 cursor-pointer">Home</Link>
+            <a href="#features" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2 cursor-pointer">Features</a>
+            <a href="#testimonials" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2 cursor-pointer">Testimonials</a>
+            <a href="#contact" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2 cursor-pointer">Contact</a>
+            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="text-gray-700 font-medium py-2 cursor-pointer">Dashboard</Link>
           </div>
         )}
       </header>
@@ -89,13 +82,13 @@ export default function Page() {
         <div className="flex flex-wrap justify-center gap-4">
           <button
             onClick={handleGetStarted}
-            className="bg-white text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"
+            className="bg-white text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition cursor-pointer"
           >
             Get Started
           </button>
           <a
             href="#features"
-            className="border border-white px-6 py-3 rounded-lg font-semibold text-white hover:bg-white hover:text-gray-900 transition"
+            className="border border-white px-6 py-3 rounded-lg font-semibold text-white hover:bg-white hover:text-gray-900 transition cursor-pointer"
           >
             Learn More
           </a>
@@ -111,9 +104,8 @@ export default function Page() {
           </p>
 
           <div className="flex flex-wrap justify-center mt-10">
-            {/* Card 1 */}
             <div className="w-full md:w-1/3 px-4 py-6">
-              <div className="bg-blue-50 rounded-lg p-8 shadow-md hover:shadow-lg transition">
+              <div className="bg-blue-50 rounded-lg p-8 shadow-md hover:shadow-lg transition cursor-pointer">
                 <h3 className="text-2xl font-semibold text-gray-800 mb-2">
                   AI Mock Interviews
                 </h3>
@@ -123,9 +115,8 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Card 2 */}
             <div className="w-full md:w-1/3 px-4 py-6">
-              <div className="bg-blue-50 rounded-lg p-8 shadow-md hover:shadow-lg transition">
+              <div className="bg-blue-50 rounded-lg p-8 shadow-md hover:shadow-lg transition cursor-pointer">
                 <h3 className="text-2xl font-semibold text-gray-800 mb-2">
                   Instant Feedback
                 </h3>
@@ -135,9 +126,8 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Card 3 */}
             <div className="w-full md:w-1/3 px-4 py-6">
-              <div className="bg-blue-50 rounded-lg p-8 shadow-md hover:shadow-lg transition">
+              <div className="bg-blue-50 rounded-lg p-8 shadow-md hover:shadow-lg transition cursor-pointer">
                 <h3 className="text-2xl font-semibold text-gray-800 mb-2">
                   Comprehensive Reports
                 </h3>
@@ -179,34 +169,33 @@ export default function Page() {
           <input
             type="text"
             placeholder="Your Name"
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-text"
           />
           <input
             type="email"
             placeholder="Your Email"
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-text"
           />
           <textarea
             rows="4"
             placeholder="Your Message"
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-text"
           ></textarea>
           <button
             type="submit"
-            className="bg-black text-white px-6 py-3 w-full rounded-md font-semibold hover:bg-gray-800 transition"
+            className="bg-black text-white px-6 py-3 w-full rounded-md font-semibold hover:bg-gray-800 transition cursor-pointer"
           >
             Send Message
           </button>
         </form>
 
-        {/* Social / Profiles - colorful larger icons */}
         <div className="mt-8 flex justify-center gap-6">
           <a
             href="https://github.com/devkushwah"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
-            className="transform transition-transform hover:scale-110"
+            className="transform transition-transform hover:scale-110 cursor-pointer"
           >
             <div className="flex items-center justify-center w-14 h-14 rounded-full bg-[#181717]">
               <Github className="w-7 h-7 text-white" />
@@ -218,7 +207,7 @@ export default function Page() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="LinkedIn"
-            className="transform transition-transform hover:scale-110"
+            className="transform transition-transform hover:scale-110 cursor-pointer"
           >
             <div className="flex items-center justify-center w-14 h-14 rounded-full bg-[#0A66C2]">
               <Linkedin className="w-7 h-7 text-white" />
@@ -230,7 +219,7 @@ export default function Page() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Profile"
-            className="transform transition-transform hover:scale-110"
+            className="transform transition-transform hover:scale-110 cursor-pointer"
           >
             <div className="flex items-center justify-center w-14 h-14 rounded-full bg-[#6B46C1]">
               <User className="w-7 h-7 text-white" />
