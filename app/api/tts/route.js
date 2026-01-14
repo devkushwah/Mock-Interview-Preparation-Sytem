@@ -25,8 +25,8 @@ export async function POST(request) {
     const timeoutId = setTimeout(() => ac.abort(), 25000)
 
     // ✅ ADDED: speaking_rate parameter for interview-realistic pace
-    const url = 'https://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=mp3&speaking_rate=0.85'
-    //                                                                                    ↑ 85% speed = natural interview pace
+    const url = 'https://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=mp3&speaking_rate=0.90'
+    //                                                                                    ↑ 90% speed = natural interview pace
 
     const resp = await fetch(url, {
       method: 'POST',

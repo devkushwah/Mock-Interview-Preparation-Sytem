@@ -142,15 +142,15 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     return out
   }
 
-  // ✅ SLOWER playback with 0.85x speed
+  // ✅ SLOWER playback with 0.90x speed
   const playAudioBlob = useCallback((blob) => {
     return new Promise((resolve) => {
       try {
         const url = URL.createObjectURL(blob)
         const audio = new Audio(url)
 
-        // 🔥 SLOW DOWN TO 85% SPEED FOR CLEARER SPEECH
-        audio.playbackRate = 0.85
+        // 🔥 SLOW DOWN TO 90% SPEED FOR CLEARER SPEECH
+        audio.playbackRate = 0.90
 
         const cleanup = () => {
           try { URL.revokeObjectURL(url) } catch {}
