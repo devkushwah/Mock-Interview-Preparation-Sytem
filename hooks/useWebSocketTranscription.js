@@ -9,6 +9,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const [interimTranscript, setInterimTranscript] = useState('')
   const [aiResponse, setAiResponse] = useState('')
   const [isAiProcessing, setIsAiProcessing] = useState(false)
+  // ✅ NEW: Add thinking state
+  const [isThinking, setIsThinking] = useState(false)
   const [conversationHistory, setConversationHistory] = useState([])
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -294,6 +296,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     try {
       if (!audioChunksRef.current || audioChunksRef.current.length <= 1) {
         console.warn('TTS: no audio payload received.')
+        // ✅ Clear thinking before stopping processing
+        setIsThinking(false)
         setIsAiProcessing(false)
         return
       }
@@ -310,8 +314,11 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const url = URL.createObjectURL(audioBlob)
       const audio = new Audio(url)
 
-      // 🔥 SLOW DOWN TO 85% SPEED
-      audio.playbackRate = 0.85
+      audio.playbackRate = 0.90
+
+      // ✅ THINK -> SPEAK transition: Clear thinking, start speaking
+      setIsThinking(false)
+      setIsAiProcessing(true)
 
       audio.onended = () => {
         URL.revokeObjectURL(url)
@@ -320,6 +327,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
       audio.onerror = () => {
         URL.revokeObjectURL(url)
+        setIsThinking(false)
         setIsAiProcessing(false)
       }
 
@@ -327,6 +335,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       audioChunksRef.current = [audioChunksRef.current[0]]
     } catch (e) {
       console.error('Error playing TTS audio:', e)
+      setIsThinking(false)
       setIsAiProcessing(false)
     }
   }, [])
@@ -447,7 +456,10 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
           throw new Error('All TTS chunks failed')
         }
 
-        // 🔥 ADD 300ms PAUSE BETWEEN CHUNKS
+        // ✅ THINK -> SPEAK: Clear thinking before first audio plays
+        setIsThinking(false)
+        setIsAiProcessing(true)
+
         for (let i = 0; i < blobs.length; i++) {
           const { blob } = blobs[i]
           const success = await playAudioBlob(blob)
@@ -464,6 +476,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         setAiTtsReady(true)
       } catch (e) {
         console.warn('HTTP TTS failed:', e?.message || e)
+        setIsThinking(false)
       } finally {
         setIsAiProcessing(false)
         if (startWithAI && !startedOnceRef.current) {
@@ -484,6 +497,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       if (ttsFlushTimeoutRef.current) clearTimeout(ttsFlushTimeoutRef.current)
       ttsFlushTimeoutRef.current = setTimeout(() => {
         console.warn('TTS: flush timeout — continuing.')
+        setIsThinking(false)
         setIsAiProcessing(false)
         if (startWithAI && !startedOnceRef.current) {
           startedOnceRef.current = true
@@ -500,6 +514,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     if (ttsFlushTimeoutRef.current) clearTimeout(ttsFlushTimeoutRef.current)
     ttsFlushTimeoutRef.current = setTimeout(() => {
       console.warn('TTS: flush timeout — continuing.')
+      setIsThinking(false)
       setIsAiProcessing(false)
       if (startWithAI && !startedOnceRef.current) {
         startedOnceRef.current = true
@@ -510,7 +525,9 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   const generateAIIntro = useCallback(async (room) => {
     try {
-      setIsAiProcessing(true)
+      // ✅ LISTEN -> THINK: Start thinking when AI starts processing
+      setIsThinking(true)
+      setIsAiProcessing(false)
       setAiResponse('')
 
       const introPrompt = [
@@ -551,6 +568,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       setAiResponse(aiMessage)
       setConversationHistory(prev => [...prev, { role: 'assistant', content: aiMessage }])
 
+      // ✅ TTS will handle THINK -> SPEAK transition
       await sendTextToTTS(aiMessage)
     } catch (e) {
       console.error('Error generating AI intro:', e)
@@ -563,10 +581,12 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   const generateAIResponse = useCallback(async (completeTranscript, room) => {
     try {
-      if (isAiProcessing) return
+      if (isAiProcessing || isThinking) return
       if (!completeTranscript || completeTranscript.trim().length < 5) return
 
-      setIsAiProcessing(true)
+      // ✅ LISTEN -> THINK: Start thinking when AI starts processing
+      setIsThinking(true)
+      setIsAiProcessing(false)
       setAiResponse('')
 
       const response = await fetch('/api/chat', {
@@ -585,6 +605,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       })
 
       if (!response.ok) {
+        setIsThinking(false)
         setIsAiProcessing(false)
         return
       }
@@ -597,6 +618,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const assistantMessage = { role: 'assistant', content: aiMessage }
       setConversationHistory(prev => [...prev, userMessage, assistantMessage])
 
+      // ✅ TTS will handle THINK -> SPEAK transition
       await sendTextToTTS(aiMessage)
 
       accumulatedTranscriptRef.current = ''
@@ -604,29 +626,25 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     } catch (e) {
       console.error('Error generating AI response:', e)
       setError('Failed to generate response')
+      setIsThinking(false)
       setIsAiProcessing(false)
     }
-  }, [sendTextToTTS, isAiProcessing])
+  }, [sendTextToTTS, isAiProcessing, isThinking])
 
   const handleSpeechComplete = useCallback((finalTranscript, room) => {
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
-    // ✅ PREVENT DUPLICATE: Skip if this exact transcript was just processed
     if (finalTranscript && finalTranscript.trim()) {
       const trimmed = finalTranscript.trim()
       
-      // Check if this is a duplicate within last 2 seconds
-      const recentKey = `${Date.now()}_${trimmed}`
       if (processedTranscriptsRef.current.has(trimmed)) {
         console.log('⚠️ Duplicate speech fragment detected, skipping:', trimmed)
         return
       }
       
       processedTranscriptsRef.current.add(trimmed)
-      // Clean up old entries after 5 seconds
       setTimeout(() => processedTranscriptsRef.current.delete(trimmed), 5000)
       
-      // Only append if not already in accumulated
       const currentLower = accumulatedTranscriptRef.current.toLowerCase()
       const newLower = trimmed.toLowerCase()
       
@@ -650,7 +668,8 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         wordCount >= MIN_WORDS_FOR_RESPONSE &&
         accumulated &&
         accumulated !== lastProcessedTranscriptRef.current &&
-        !isAiProcessing
+        !isAiProcessing &&
+        !isThinking
       ) {
         console.log('✅ Triggering AI response for:', accumulated)
         generateAIResponse(accumulated, room)
@@ -661,7 +680,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         console.log(`⚠️ Too few words (${wordCount}), waiting for more...`)
       }
     }, SPEECH_PAUSE_THRESHOLD)
-  }, [generateAIResponse, isAiProcessing])
+  }, [generateAIResponse, isAiProcessing, isThinking])
 
   handleSpeechCompleteRef.current = handleSpeechComplete
 
@@ -706,6 +725,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     setHasStartedInterview(false)
     setAiTtsReady(false)
     setIsAiProcessing(false)
+    setIsThinking(false)
     setTranscript('')
     setInterimTranscript('')
     setAiResponse('')
@@ -773,6 +793,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     interimTranscript,
     aiResponse,
     isAiProcessing,
+    isThinking, // ✅ NEW: Export thinking state
     conversationHistory,
     isConnected,
     isConnecting,

@@ -9,7 +9,7 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { Button } from "@/components/ui/button"
 import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
 import { completeDiscussion, generateAndSaveFullFeedback } from '@/services/firebase/discussionService'
-import { Mic, MicOff, Zap, Clock } from 'lucide-react'
+import { Mic, MicOff, Zap, Clock, Brain } from 'lucide-react'
 
 const InterviewEndDialog = dynamic(() => import('../../_components/InterviewEndDialog'), { ssr: false })
 
@@ -18,8 +18,7 @@ const InterviewPage = () => {
   const router = useRouter()
   const { userData } = useContext(UserContext)
   
-  // ✅ FIX: Proper credit state management
-  const [userCredits, setUserCredits] = useState(null) // null = loading
+  const [userCredits, setUserCredits] = useState(null)
   const [creditsLoading, setCreditsLoading] = useState(true)
 
   const [discussionRoomData, setDiscussionRoomData] = useState(null)
@@ -42,6 +41,7 @@ const InterviewPage = () => {
 
   const {
     isAiProcessing,
+    isThinking, // ✅ NEW: Get thinking state
     conversationHistory,
     isConnecting,
     error: transcriptionError,
@@ -288,6 +288,15 @@ const InterviewPage = () => {
     )
   }
 
+  // ✅ NEW: Determine current state for UI
+  const getInterviewStatus = () => {
+    if (isAiProcessing) return { label: 'Speaking', color: 'text-blue-600', icon: '🗣️' }
+    if (isThinking) return { label: 'Thinking', color: 'text-purple-600', icon: '🧠' }
+    return { label: 'Listening', color: 'text-green-600', icon: '👂' }
+  }
+
+  const currentStatus = getInterviewStatus()
+
   return (
     <div className="relative flex min-h-screen flex-col bg-gradient-to-b from-slate-50 via-white to-slate-100">
       {/* soft background glows */}
@@ -372,13 +381,6 @@ const InterviewPage = () => {
                     >
                       {isConnecting ? 'Connecting...' : 'Start Interview'}
                     </Button>
-                    
-                    {/* ✅ NEW: Debug info (remove in production) */}
-                    <div className="text-xs text-slate-500">
-                      Credits: {userCredits ?? 'loading'} | 
-                      Has: {hasCredits ? '✅' : '❌'} | 
-                      Loading: {creditsLoading ? '⏳' : '✅'}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -392,21 +394,30 @@ const InterviewPage = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold text-slate-900">Interview in progress</h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {isAiProcessing ? 'AI is speaking…' : 'Listening for your response'}
+                    {/* ✅ NEW: Show dynamic status with icon */}
+                    <p className={`mt-1 text-sm font-medium ${currentStatus.color} flex items-center gap-2`}>
+                      <span className="text-base">{currentStatus.icon}</span>
+                      {currentStatus.label}
                     </p>
                   </div>
+                  {/* ✅ NEW: Visual indicator based on state */}
                   <div className="flex items-end gap-1 h-8">
-                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1s_ease-in-out_infinite] h-5"></span>
-                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1.2s_ease-in-out_infinite] h-7"></span>
-                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_0.9s_ease-in-out_infinite] h-4"></span>
-                    <span className="w-1.5 rounded bg-blue-500 animate-[pulse_1.1s_ease-in-out_infinite] h-6"></span>
+                    {isThinking ? (
+                      <Brain className={`h-8 w-8 text-purple-500 animate-pulse`} />
+                    ) : (
+                      <>
+                        <span className={`w-1.5 rounded ${isAiProcessing ? 'bg-blue-500' : 'bg-green-500'} animate-[pulse_1s_ease-in-out_infinite] h-5`}></span>
+                        <span className={`w-1.5 rounded ${isAiProcessing ? 'bg-blue-500' : 'bg-green-500'} animate-[pulse_1.2s_ease-in-out_infinite] h-7`}></span>
+                        <span className={`w-1.5 rounded ${isAiProcessing ? 'bg-blue-500' : 'bg-green-500'} animate-[pulse_0.9s_ease-in-out_infinite] h-4`}></span>
+                        <span className={`w-1.5 rounded ${isAiProcessing ? 'bg-blue-500' : 'bg-green-500'} animate-[pulse_1.1s_ease-in-out_infinite] h-6`}></span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-3 text-xs text-slate-500">
                   <div className="rounded-lg ring-1 ring-slate-200 p-3 bg-white">
                     <div className="font-medium text-slate-700">Status</div>
-                    <div>{isAiProcessing ? 'Speaking' : 'Listening'}</div>
+                    <div className={currentStatus.color}>{currentStatus.label}</div>
                   </div>
                   <div className="rounded-lg ring-1 ring-slate-200 p-3 bg-white">
                     <div className="font-medium text-slate-700">Elapsed</div>
