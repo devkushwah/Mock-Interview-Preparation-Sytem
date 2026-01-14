@@ -36,6 +36,10 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   const ttsModeRef = useRef((process.env.NEXT_PUBLIC_TTS_MODE || 'ws').toLowerCase())
 
+  // ✅ FIX: Move deduplication refs to component scope
+  const processedTranscriptsRef = useRef(new Set())
+  const lastFinalTranscriptRef = useRef('')
+
   useEffect(() => {
     console.log('[TTS] mode=', ttsModeRef.current)
   }, [])
@@ -177,15 +181,22 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       const room = latestDiscussionRef.current
       if (!stream || !room) return
 
-      if (
-        wsRef.current &&
-        (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
-      ) {
-        console.log('ASR already running, skip start')
-        return
+      // ✅ STRENGTHEN: Close any existing connection before creating new one
+      if (wsRef.current) {
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          console.log('ASR already running, skip start')
+          return
+        }
+        // Force close stale connection
+        try { 
+          wsRef.current.close() 
+          wsRef.current = null
+        } catch {}
       }
 
       const myId = ++asrConnIdRef.current
+      console.log(`🎙️ Starting ASR connection #${myId}`)
+      
       const wsUrl =
         `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=2000&vad_events=true&punctuate=true`
       const ws = new WebSocket(wsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
@@ -205,6 +216,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         mediaRecorderRef.current.start(100)
       }
 
+      // ✅ FIX: Remove local declarations - now using component-level refs
       ws.onmessage = (event) => {
         if (asrConnIdRef.current !== myId) return
         const data = JSON.parse(event.data)
@@ -212,14 +224,30 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         if (data.channel?.alternatives?.[0]) {
           const t = data.channel.alternatives[0].transcript
           if (data.is_final && t.trim()) {
-            const sep = accumulatedTranscriptRef.current ? ' ' : ''
-            accumulatedTranscriptRef.current = (accumulatedTranscriptRef.current + sep + t).trim()
+            // ✅ PREVENT DUPLICATE: Check if we already processed this exact transcript
+            if (t === lastFinalTranscriptRef.current) {
+              console.log('⚠️ Duplicate final transcript detected, skipping:', t)
+              return
+            }
             
-            setTranscript(accumulatedTranscriptRef.current)
-            setInterimTranscript('')
-            lastSpeechTimeRef.current = Date.now()
+            lastFinalTranscriptRef.current = t
             
-            handleSpeechCompleteRef.current(t, room)
+            // ✅ PREVENT DUPLICATE: Only add if not already in accumulated
+            const currentLower = accumulatedTranscriptRef.current.toLowerCase()
+            const newLower = t.toLowerCase().trim()
+            
+            if (!currentLower.includes(newLower)) {
+              const sep = accumulatedTranscriptRef.current ? ' ' : ''
+              accumulatedTranscriptRef.current = (accumulatedTranscriptRef.current + sep + t).trim()
+              
+              setTranscript(accumulatedTranscriptRef.current)
+              setInterimTranscript('')
+              lastSpeechTimeRef.current = Date.now()
+              
+              handleSpeechCompleteRef.current(t, room)
+            } else {
+              console.log('⚠️ Transcript already accumulated, skipping duplicate:', t)
+            }
           } else if (t) {
             lastSpeechTimeRef.current = Date.now()
             setInterimTranscript(t)
@@ -583,9 +611,29 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   const handleSpeechComplete = useCallback((finalTranscript, room) => {
     if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current)
 
+    // ✅ PREVENT DUPLICATE: Skip if this exact transcript was just processed
     if (finalTranscript && finalTranscript.trim()) {
-      const sep = accumulatedTranscriptRef.current ? ' ' : ''
-      accumulatedTranscriptRef.current += sep + finalTranscript.trim()
+      const trimmed = finalTranscript.trim()
+      
+      // Check if this is a duplicate within last 2 seconds
+      const recentKey = `${Date.now()}_${trimmed}`
+      if (processedTranscriptsRef.current.has(trimmed)) {
+        console.log('⚠️ Duplicate speech fragment detected, skipping:', trimmed)
+        return
+      }
+      
+      processedTranscriptsRef.current.add(trimmed)
+      // Clean up old entries after 5 seconds
+      setTimeout(() => processedTranscriptsRef.current.delete(trimmed), 5000)
+      
+      // Only append if not already in accumulated
+      const currentLower = accumulatedTranscriptRef.current.toLowerCase()
+      const newLower = trimmed.toLowerCase()
+      
+      if (!currentLower.includes(newLower)) {
+        const sep = accumulatedTranscriptRef.current ? ' ' : ''
+        accumulatedTranscriptRef.current += sep + trimmed
+      }
     }
 
     lastSpeechTimeRef.current = Date.now()
@@ -666,6 +714,10 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     accumulatedTranscriptRef.current = ''
     lastProcessedTranscriptRef.current = ''
     lastSpeechTimeRef.current = Date.now()
+
+    // ✅ ADD: Clear deduplication tracking
+    processedTranscriptsRef.current.clear()
+    lastFinalTranscriptRef.current = ''
 
     setTimeout(() => { disconnectingRef.current = false }, 0)
   }, [])
