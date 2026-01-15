@@ -7,7 +7,8 @@ import { getUserDiscussions } from '@/services/firebase/discussionService'
 import { ChevronRight, Lightbulb, Calendar } from 'lucide-react'
 
 export default function HistoryPage() {
-  const { userData } = useContext(UserContext)
+  const ctx = useContext(UserContext)
+  const userData = ctx?.userData
   const [discussions, setDiscussions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -105,7 +106,7 @@ export default function HistoryPage() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10 backdrop-blur bg-white/95">
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="mx-auto px-4 sm:px-6 lg:px-12 xl:px-20 2xl:px-32 py-6">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -124,7 +125,7 @@ export default function HistoryPage() {
       </div>
 
       {/* Content */}
-      <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto px-4 sm:px-6 lg:px-12 xl:px-20 2xl:px-32 py-8">
         {discussions.length === 0 ? (
           <div className="max-w-2xl mx-auto">
             <div className="rounded-2xl border border-dashed border-indigo-300 bg-white p-12 text-center">
@@ -143,7 +144,7 @@ export default function HistoryPage() {
           </div>
         ) : (
           // ✅ GRID LAYOUT - 2 cards per row
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8">
             {discussions.map((discussion) => {
               const isExpanded = expandedId === discussion.id
               const currentTab = activeTab[discussion.id] || 'summary'
@@ -163,11 +164,11 @@ export default function HistoryPage() {
                   {/* Collapsible Header */}
                   <button
                     onClick={() => toggleExpand(discussion.id)}
-                    className="w-full flex items-center justify-between p-6 text-left hover:bg-slate-50 transition"
+                    className="w-full flex items-center justify-between p-5 lg:p-10 text-left hover:bg-slate-50 transition"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-slate-900 truncate">
+                      <div className="flex items-center gap-2 lg:gap-3 mb-2 lg:mb-4">
+                        <h3 className="text-lg lg:text-2xl font-semibold text-slate-900 truncate">
                           {discussion.topic || 'Untitled Session'}
                         </h3>
                         <span className="text-xs text-slate-500 whitespace-nowrap">{formatDate(discussion.createdAt)}</span>
@@ -183,12 +184,12 @@ export default function HistoryPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                    <div className="flex items-center gap-3 lg:gap-5 flex-shrink-0 ml-3 lg:ml-4">
                       <div className="text-right">
-                        <div className={`text-2xl font-bold ${getScoreColor(overallScore)}`}>
+                        <div className={`text-2xl lg:text-4xl font-bold ${getScoreColor(overallScore)}`}>
                           {overallScore}%
                         </div>
-                        <div className="text-xs text-slate-500">{getScoreLabel(overallScore)}</div>
+                        <div className="text-sm text-slate-500">{getScoreLabel(overallScore)}</div>
                       </div>
                       <ChevronRight
                         className={`h-5 w-5 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
@@ -224,9 +225,9 @@ export default function HistoryPage() {
                       </div>
 
                       {/* Tab Content */}
-                      <div className="p-6">
+                      <div className="p-4 lg:p-10">
                         {currentTab === 'summary' ? (
-                          <div className="space-y-6">
+                          <div className="space-y-4 lg:space-y-8">
                             {/* Overall Score Card */}
                             <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                               <div className="flex items-center justify-between mb-4">
