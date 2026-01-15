@@ -9,7 +9,7 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { Button } from "@/components/ui/button"
 import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
 import { completeDiscussion, generateAndSaveFullFeedback } from '@/services/firebase/discussionService'
-import { Mic, MicOff, Zap, Clock, Brain } from 'lucide-react'
+import { Mic, MicOff, Zap, Clock, Brain, MessageSquare } from 'lucide-react'
 
 const InterviewEndDialog = dynamic(() => import('../../_components/InterviewEndDialog'), { ssr: false })
 
@@ -41,14 +41,17 @@ const InterviewPage = () => {
 
   const {
     isAiProcessing,
-    isThinking, // ✅ NEW: Get thinking state
+    isThinking,
     conversationHistory,
     isConnecting,
     error: transcriptionError,
     connect,
     disconnect,
     clearTranscript,
-    hasStartedInterview
+    hasStartedInterview,
+    aiResponse,
+    transcript,
+    interimTranscript
   } = useWebSocketTranscription(
     interviewContext,
     discussionRoomData,
@@ -140,7 +143,7 @@ const InterviewPage = () => {
     return () => unsub()
   }, [id])
 
-  // ✅ FIX: Proper credit fetching with loading state
+  // Credit fetching
   useEffect(() => {
     let mounted = true
     
@@ -179,7 +182,6 @@ const InterviewPage = () => {
     }
   }, [userData?.id, userData?.credit])
 
-  // ✅ FIX: Proper hasCredits calculation
   const hasCredits = useMemo(() => {
     if (creditsLoading || userCredits === null) return false
     return userCredits >= 500
@@ -261,7 +263,6 @@ const InterviewPage = () => {
     }
   }, [disconnect])
 
-  // ✅ FIX: Show loading while credits are being fetched
   if (loading || creditsLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -288,7 +289,6 @@ const InterviewPage = () => {
     )
   }
 
-  // ✅ NEW: Determine current state for UI
   const getInterviewStatus = () => {
     if (isAiProcessing) return { label: 'Speaking', color: 'text-blue-600', icon: '🗣️' }
     if (isThinking) return { label: 'Thinking', color: 'text-purple-600', icon: '🧠' }
@@ -299,7 +299,6 @@ const InterviewPage = () => {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-gradient-to-b from-slate-50 via-white to-slate-100">
-      {/* soft background glows */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden">
         <div className="absolute -top-28 -left-28 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="absolute -bottom-40 -right-24 h-80 w-80 rounded-full bg-indigo-100/40 blur-3xl" />
@@ -325,7 +324,6 @@ const InterviewPage = () => {
                   <span className="font-mono">{formatTime(elapsedTime)}</span>
                 </span>
                 {!isOffline && <span className="hidden sm:inline-flex items-center gap-1 text-emerald-600"><Zap className="h-3 w-3" />Live</span>}
-                {/* ✅ NEW: Show credit count */}
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 ring-1 ring-amber-200 text-amber-700">
                   💰 {userCredits ?? 0}
                 </span>
@@ -349,7 +347,6 @@ const InterviewPage = () => {
       {/* Main */}
       <main className="flex-1">
         {!hasStartedInterview ? (
-          // Centered start card
           <section className="mx-auto max-w-4xl px-4 md:px-6 py-10 md:py-14">
             <div className="mx-auto w-full max-w-3xl">
               <div className="relative overflow-hidden rounded-3xl ring-1 ring-slate-200/60 bg-gradient-to-br from-white to-blue-50/60 p-8 md:p-10 shadow-lg">
@@ -365,7 +362,6 @@ const InterviewPage = () => {
                     The AI will greet you first and then start recording your answers automatically.
                   </p>
                   
-                  {/* ✅ NEW: Show credit warning if insufficient */}
                   {!hasCredits && (
                     <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
                       ⚠️ You need at least 500 credits to start. Current: {userCredits ?? 0}
@@ -387,20 +383,18 @@ const InterviewPage = () => {
             </div>
           </section>
         ) : (
-          // Centered in-progress card
           <section className="mx-auto max-w-4xl px-4 md:px-6 py-10 md:py-14">
-            <div className="mx-auto w-full max-w-3xl">
-              <div className="rounded-3xl ring-1 ring-slate-200/60 bg-white/95 p-8 md:p-10 shadow-lg">
+            <div className="mx-auto w-full max-w-3xl space-y-4">
+              {/* Status Card */}
+              <div className="rounded-3xl ring-1 ring-slate-200/60 bg-white/95 p-6 md:p-8 shadow-lg">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold text-slate-900">Interview in progress</h2>
-                    {/* ✅ NEW: Show dynamic status with icon */}
                     <p className={`mt-1 text-sm font-medium ${currentStatus.color} flex items-center gap-2`}>
                       <span className="text-base">{currentStatus.icon}</span>
                       {currentStatus.label}
                     </p>
                   </div>
-                  {/* ✅ NEW: Visual indicator based on state */}
                   <div className="flex items-end gap-1 h-8">
                     {isThinking ? (
                       <Brain className={`h-8 w-8 text-purple-500 animate-pulse`} />
@@ -425,6 +419,44 @@ const InterviewPage = () => {
                   </div>
                 </div>
               </div>
+
+              {/* ✅ ONLY AI MESSAGE CARD */}
+              {(aiResponse || isThinking || isAiProcessing) && (
+                <div className="rounded-3xl ring-1 ring-blue-200/60 bg-gradient-to-br from-blue-50 to-white p-6 md:p-8 shadow-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        {isThinking ? (
+                          <Brain className="h-5 w-5 text-blue-600 animate-pulse" />
+                        ) : (
+                          <MessageSquare className="h-5 w-5 text-blue-600" />
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-sm font-semibold text-blue-900">
+                          {discussionRoomData?.interviewerName || 'Interviewer'}
+                        </h3>
+                        {isAiProcessing && (
+                          <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                            <span className="animate-pulse">●</span> Speaking
+                          </span>
+                        )}
+                      </div>
+                      {isThinking ? (
+                        <p className="text-sm text-blue-600 italic flex items-center gap-2">
+                          <span className="animate-pulse">Thinking...</span>
+                        </p>
+                      ) : aiResponse ? (
+                        <p className="text-sm md:text-base text-slate-800 leading-relaxed">
+                          {aiResponse}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         )}

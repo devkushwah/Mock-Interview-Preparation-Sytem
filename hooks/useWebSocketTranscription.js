@@ -47,8 +47,9 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
   }, [])
 
   // ✅ 2 second pause detection
-  const SPEECH_PAUSE_THRESHOLD = 2000
-  const MIN_WORDS_FOR_RESPONSE = 5
+  // REDUCE minimum words from 5 to 2 for short responses
+  const SPEECH_PAUSE_THRESHOLD = 1500
+  const MIN_WORDS_FOR_RESPONSE = 2  // Changed from 5 to 2
 
   // Speech accumulation
   const speechTimeoutRef = useRef(null)
@@ -659,9 +660,9 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
     speechTimeoutRef.current = setTimeout(() => {
       const since = Date.now() - lastSpeechTimeRef.current
       const accumulated = accumulatedTranscriptRef.current.trim()
-      const wordCount = accumulated.split(/\s+/).length
+      const wordCount = accumulated.split(/\s+/).filter(w => w.length > 0).length  // ✅ Better word counting
 
-      console.log(`🎤 Speech check: ${since}ms since last speech, ${wordCount} words`)
+      console.log(`🎤 Speech check: ${since}ms since last speech, ${wordCount} words, text: "${accumulated}"`)
 
       if (
         since >= SPEECH_PAUSE_THRESHOLD &&
@@ -677,7 +678,9 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
         console.log('⏳ User might still be speaking, waiting...')
         handleSpeechComplete('', room)
       } else if (wordCount < MIN_WORDS_FOR_RESPONSE) {
-        console.log(`⚠️ Too few words (${wordCount}), waiting for more...`)
+        console.log(`⚠️ Too few words (${wordCount}/${MIN_WORDS_FOR_RESPONSE}), waiting for more...`)
+      } else {
+        console.log('⚠️ Other condition not met - already processing or duplicate')
       }
     }, SPEECH_PAUSE_THRESHOLD)
   }, [generateAIResponse, isAiProcessing, isThinking])
