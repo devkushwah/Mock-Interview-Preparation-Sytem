@@ -11,8 +11,6 @@ import { useWebSocketTranscription } from '@/hooks/useWebSocketTranscription'
 import { completeDiscussion, generateAndSaveFullFeedback } from '@/services/firebase/discussionService'
 import { Mic, MicOff, Zap, Clock, Brain, MessageSquare } from 'lucide-react'
 
-const InterviewEndDialog = dynamic(() => import('../../_components/InterviewEndDialog'), { ssr: false })
-
 const InterviewPage = () => {
   const { id } = useParams()
   const router = useRouter()
@@ -240,17 +238,15 @@ const InterviewPage = () => {
         await updateDoc(doc(db, 'discussionRooms', id), { conversation: conversationHistory })
       }
 
-      setShowEndDialog(true)
+      // ✅ NEW: Redirect to dedicated history page
+      router.replace(`/dashboard/history?expand=${id}`)
     } catch (err) {
       console.error('Error ending interview:', err)
-      if (err.code === 'unavailable' || err.message?.includes('offline')) {
-        alert('Some data may not have been saved due to connection issues. Your conversation history has been preserved locally.')
-      }
-      setShowEndDialog(true)
+      router.replace('/dashboard/history')
     } finally {
       setIsEndingInterview(false)
     }
-  }, [disconnect, id, interviewContext, conversationHistory, discussionRoomData])
+  }, [disconnect, id, interviewContext, conversationHistory, discussionRoomData, router])
 
   const handleCloseDialog = useCallback(() => {
     setShowEndDialog(false)
@@ -461,27 +457,6 @@ const InterviewPage = () => {
           </section>
         )}
       </main>
-
-      {/* End Dialog */}
-      {isEndingInterview && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="mx-4 flex flex-col items-center gap-4 rounded-2xl bg-white p-8 shadow-2xl max-w-sm">
-            <div className="h-10 w-10 md:h-12 md:w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-            <p className="text-center text-sm text-slate-600">
-              Generating your feedback…
-              <br />
-              <span className="text-xs text-slate-500">This may take a moment</span>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {showEndDialog && (
-        <InterviewEndDialog
-          discussionRoomId={id}
-          onClose={handleCloseDialog}
-        />
-      )}
     </div>
   )
 }
