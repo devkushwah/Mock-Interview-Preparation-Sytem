@@ -442,12 +442,18 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
     }
 
     const roomRef = doc(db, 'discussionRooms', discussionRoomId)
+    
+    // ✅ Extract overall score from feedback array
+    const overallPerformance = feedbackArray.find(f => f.point === 'Overall Performance')
+    const overallScore = overallPerformance?.overall_score || overallPerformance?.score || null
+    
     await updateDoc(roomRef, {
       feedback: feedbackArray,
+      score: overallScore, // ✅ Save as top-level field
       updatedAt: serverTimestamp()
     })
 
-    return { success: true, feedback: feedbackArray }
+    return { success: true, feedback: feedbackArray, score: overallScore }
   } catch (error) {
     console.error('❌ Full feedback generation error:', error)
     return { success: false, error: error.message }

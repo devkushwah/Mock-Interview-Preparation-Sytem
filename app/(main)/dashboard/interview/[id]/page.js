@@ -457,6 +457,24 @@ const InterviewPage = () => {
           </section>
         )}
       </main>
+
+      {/* ✅ Loading Overlay - Show when ending interview */}
+      {isEndingInterview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md mx-4 text-center">
+            <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">Ending Interview</h3>
+            <p className="text-sm text-slate-600">
+              Generating your detailed feedback report...
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" style={{animationDelay: '0.2s'}}></span>
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" style={{animationDelay: '0.4s'}}></span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

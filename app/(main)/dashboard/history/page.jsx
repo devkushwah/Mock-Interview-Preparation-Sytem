@@ -150,7 +150,12 @@ export default function HistoryPage() {
               const currentTab = activeTab[discussion.id] || 'summary'
               const overallScore = discussion.feedback?.find(f => f.point === 'Overall Performance')?.overall_score || 
                                  discussion.score || 
-                                 40
+                                 null // ✅ Show N/A if no score
+
+              // ✅ Skip if no score available
+              if (overallScore === null) {
+                console.warn(`No score for discussion ${discussion.id}`)
+              }
 
               return (
                 <article
@@ -186,10 +191,14 @@ export default function HistoryPage() {
                     </div>
                     <div className="flex items-center gap-3 lg:gap-5 flex-shrink-0 ml-3 lg:ml-4">
                       <div className="text-right">
-                        <div className={`text-2xl lg:text-4xl font-bold ${getScoreColor(overallScore)}`}>
-                          {overallScore}%
+                        <div className={`text-2xl lg:text-4xl font-bold ${
+                          overallScore === null ? 'text-slate-400' : getScoreColor(overallScore)
+                        }`}>
+                          {overallScore === null ? 'N/A' : `${overallScore}%`}
                         </div>
-                        <div className="text-sm text-slate-500">{getScoreLabel(overallScore)}</div>
+                        <div className="text-sm text-slate-500">
+                          {overallScore === null ? 'Processing' : getScoreLabel(overallScore)}
+                        </div>
                       </div>
                       <ChevronRight
                         className={`h-5 w-5 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
@@ -233,18 +242,24 @@ export default function HistoryPage() {
                               <div className="flex items-center justify-between mb-4">
                                 <h4 className="text-lg font-semibold text-slate-900">Overall Score</h4>
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-2xl font-bold ${getScoreColor(overallScore)}`}>
-                                    {overallScore}%
+                                  <span className={`text-2xl font-bold ${
+                                    overallScore === null ? 'text-slate-400' : getScoreColor(overallScore)
+                                  }`}>
+                                    {overallScore === null ? 'N/A' : `${overallScore}%`}
                                   </span>
-                                  <span className="text-xs text-slate-500">{getScoreLabel(overallScore)}</span>
+                                  <span className="text-xs text-slate-500">
+                                    {overallScore === null ? 'Processing' : getScoreLabel(overallScore)}
+                                  </span>
                                 </div>
                               </div>
                               <div className="h-3 w-full rounded-full bg-slate-200">
                                 <div
                                   className={`h-3 rounded-full transition-all ${
-                                    overallScore >= 70 ? 'bg-green-500' : overallScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                    overallScore === null ? 'bg-slate-300' : 
+                                    overallScore >= 70 ? 'bg-green-500' : 
+                                    overallScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
                                   }`}
-                                  style={{ width: `${overallScore}%` }}
+                                  style={{ width: overallScore === null ? '0%' : `${overallScore}%` }}
                                 />
                               </div>
                             </div>
