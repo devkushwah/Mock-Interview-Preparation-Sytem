@@ -84,7 +84,18 @@ Return ONLY a JSON array:
 
 
 
-Minimum 3 points. Be honest but educational - critique to teach, not discourage. Focus on: accuracy, articulation depth, project linkage, progressive difficulty handling.`
+CRITICAL REQUIREMENTS:
+- Minimum 3 specific feedback points
+- MUST include "Overall Performance" point as the LAST item with "overall_score" field (0-100) that represents the final interview score
+- Be honest but educational - critique to teach, not discourage
+- Focus on: accuracy, articulation depth, project linkage, progressive difficulty handling
+
+Example of Overall Performance point:
+{
+"point": "Overall Performance",
+"overall_score": 75,
+"feedback": "Summary of strengths and areas for improvement"
+}`
 
 },
 
@@ -380,7 +391,17 @@ Return ONLY a JSON array:
 
 }].
 
-Minimum 3 points. Check for: Quantifiable metrics, specific role clarity, ownership language, learning demonstration.`
+CRITICAL REQUIREMENTS:
+- Minimum 3 specific feedback points
+- MUST include "Overall Performance" point as the LAST item with "overall_score" field (0-100) that represents the final interview score
+- Check for: Quantifiable metrics, specific role clarity, ownership language, learning demonstration
+
+Example of Overall Performance point:
+{
+"point": "Overall Performance",
+"overall_score": 75,
+"feedback": "Summary of STAR method usage and ownership mindset"
+}`
 
 },
 
@@ -577,7 +598,15 @@ Minimum 5-6 points covering:
 
 - 1-2 Integration points (tech-to-impact bridge, team collaboration on technical work)
 
+CRITICAL REQUIREMENTS:
+- MUST include "Overall Performance" point as the LAST item with "overall_score" field (0-100) that represents the final interview score combining technical and behavioral performance
 
+Example of Overall Performance point:
+{
+"point": "Overall Performance",
+"overall_score": 75,
+"feedback": "Summary combining technical competency and behavioral skills"
+}
 
 FOR FRESHERS: Be encouraging but point out gaps. Don't expect enterprise-level examples but check for learning mindset and project ownership.
 
