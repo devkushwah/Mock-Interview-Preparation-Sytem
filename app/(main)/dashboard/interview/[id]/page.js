@@ -229,9 +229,19 @@ const InterviewPage = () => {
 
       if (!feedbackResult?.success) {
         console.error('Feedback generation failed:', feedbackResult?.error)
-        await completeDiscussion(id, { feedback: null, userId: discussionRoomData?.userId })
+        await completeDiscussion(id, { feedback: null, score: null, userId: discussionRoomData?.userId })
       } else {
-        await completeDiscussion(id, { feedback: feedbackResult.feedback || null, userId: discussionRoomData?.userId })
+        // ✅ Pass score along with feedback
+        console.log('✅ Feedback generated successfully:', {
+          hasScore: !!feedbackResult.score,
+          score: feedbackResult.score,
+          feedbackLength: feedbackResult.feedback?.length
+        })
+        await completeDiscussion(id, { 
+          feedback: feedbackResult.feedback || null, 
+          score: feedbackResult.score || null,
+          userId: discussionRoomData?.userId 
+        })
       }
 
       if (conversationHistory && conversationHistory.length > 0) {

@@ -371,7 +371,11 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
 
     // Fetch room to get tier/role/experience for model routing
     const roomSnap = await getDoc(doc(db, 'discussionRooms', discussionRoomId))
-    const room = roomSnap.exists() ? roomSnap.data() : {}
+    if (!roomSnap.exists()) {
+      return { success: false, error: 'Discussion room not found' }
+    }
+    
+    const room = roomSnap.data()
     const tier = (room?.tier || 'regular').toLowerCase()
     const role = room?.role || room?.jobRole || null
     const experience = room?.experience || null
@@ -379,7 +383,10 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
     const messagesRef = collection(db, 'discussionRooms', discussionRoomId, 'messages')
     const snapshot = await getDocs(query(messagesRef, orderBy('timestamp', 'asc')))
     const messages = snapshot.docs.map(doc => doc.data())
-    if (messages.length === 0) throw new Error('No conversation found for feedback')
+    
+    if (messages.length === 0) {
+      return { success: false, error: 'No conversation found for feedback' }
+    }
 
     const conversationSummary = messages
       .map(msg => `${msg.sender === 'user' ? 'Candidate' : 'Interviewer'}: ${msg.message}`)
@@ -392,7 +399,9 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
         : (await import('@/services/options')).ExpertsList || []
 
     const expert = expertsList.find(opt => opt.name === practiceOption) || expertsList[0]
-    if (!expert || !expert.feedbackPrompt) throw new Error('No feedbackPrompt found')
+    if (!expert || !expert.feedbackPrompt) {
+      return { success: false, error: 'No feedbackPrompt found for this practice type' }
+    }
 
     const feedbackPrompt = expert.feedbackPrompt.replace('{user_topic}', topic || 'general topics')
 
@@ -407,13 +416,14 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
       result = await AIModel(contextForModel, practiceOption, fullPrompt)
     } catch (e) {
       // GROQ_KEY or AIModel error — fallback to Gemini for feedback generation
-      // Keep response shape similar to AIModel result
+      console.warn('AIModel failed, trying Gemini fallback:', e?.message || e)
       const geminiResp = await callGemini(fullPrompt)
       result = { success: !!geminiResp, response: geminiResp || null, error: e?.message || 'AIModel failed' }
     }
+    
     let feedbackArray
 
-    if (result.success) {
+    if (result.success && result.response) {
       try {
         let cleanedResponse = result.response
           .replace(/```json\s*/g, '')
@@ -432,13 +442,7 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
         }))
       }
     } else {
-      // As AIModel already tried Gemini when needed, just surface a minimal fallback
-      const lines = (result.error || '').split('\n').filter(line => line.trim().length > 0)
-      feedbackArray = lines.length ? lines.map((line, i) => ({
-        point: `Feedback Point ${i + 1}`,
-        feedback: line,
-        strength: false
-      })) : []
+      return { success: false, error: result.error || 'Failed to generate feedback from AI' }
     }
 
     const roomRef = doc(db, 'discussionRooms', discussionRoomId)
@@ -456,7 +460,7 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
     return { success: true, feedback: feedbackArray, score: overallScore }
   } catch (error) {
     console.error('❌ Full feedback generation error:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || String(error) || 'Unknown error occurred' }
   }
 }
 

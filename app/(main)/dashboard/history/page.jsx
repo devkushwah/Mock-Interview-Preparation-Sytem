@@ -34,8 +34,10 @@ export default function HistoryPage() {
       }
     }
 
-    if (userData?.id) fetchDiscussions()
-  }, [userData])
+    if (userData?.id) {
+      fetchDiscussions()
+    }
+  }, [userData?.id])
 
   useEffect(() => {
     if (expandParam && discussions.length > 0) {
@@ -150,12 +152,7 @@ export default function HistoryPage() {
               const currentTab = activeTab[discussion.id] || 'summary'
               const overallScore = discussion.feedback?.find(f => f.point === 'Overall Performance')?.overall_score || 
                                  discussion.score || 
-                                 null // ✅ Show N/A if no score
-
-              // ✅ Skip if no score available
-              if (overallScore === null) {
-                console.warn(`No score for discussion ${discussion.id}`)
-              }
+                                 null
 
               return (
                 <article
@@ -271,12 +268,14 @@ export default function HistoryPage() {
                                   👍 What Went Well
                                 </h5>
                                 <ul className="space-y-2 text-sm text-green-700">
-                                  {discussion.feedback?.filter(f => f.status === 'Strong').slice(0, 3).map((item, idx) => (
+                                  {discussion.feedback?.filter(f => 
+                                    f.status === 'Strong' || f.strength === true || (f.point === 'Overall Performance' && f.overall_score >= 70)
+                                  ).slice(0, 3).map((item, idx) => (
                                     <li key={idx} className="flex items-start gap-2">
                                       <span className="mt-0.5">•</span>
-                                      <span>{item.point}</span>
+                                      <span>{item.correction || item.point}</span>
                                     </li>
-                                  )) || <li className="text-green-600/70">No specific strengths recorded</li>}
+                                  )) || <li className="text-green-600/70">Good fluency and natural conversation flow</li>}
                                 </ul>
                               </div>
 
@@ -285,12 +284,14 @@ export default function HistoryPage() {
                                   🔄 What Needs Improvement
                                 </h5>
                                 <ul className="space-y-2 text-sm text-red-700">
-                                  {discussion.feedback?.filter(f => f.status === 'Weak' || f.status === 'Critical').slice(0, 3).map((item, idx) => (
+                                  {discussion.feedback?.filter(f => 
+                                    (f.status === 'Weak' || f.status === 'Critical' || f.error) && f.point !== 'Overall Performance'
+                                  ).slice(0, 3).map((item, idx) => (
                                     <li key={idx} className="flex items-start gap-2">
                                       <span className="mt-0.5">•</span>
-                                      <span>{item.point}</span>
+                                      <span>{item.error ? `Use "${item.correction}" instead of "${item.error}"` : item.point}</span>
                                     </li>
-                                  )) || <li className="text-red-600/70">No specific improvements recorded</li>}
+                                  )) || <li className="text-red-600/70">Continue practicing for better fluency</li>}
                                 </ul>
                               </div>
                             </div>
@@ -300,34 +301,80 @@ export default function HistoryPage() {
                             {/* Detailed Metrics */}
                             {discussion.feedback?.length > 0 ? (
                               discussion.feedback.map((fb, index) => {
-                                const score = fb.score || 0
+                                const score = fb.score || fb.overall_score || 0
                                 const getBarColor = (s) => {
                                   if (s >= 70) return 'bg-green-500'
                                   if (s >= 50) return 'bg-yellow-500'
                                   return 'bg-red-500'
                                 }
 
+                                // Check if this is English Practice format (has error/correction fields)
+                                const isEnglishPractice = fb.error || fb.correction
+
                                 return (
                                   <div key={index} className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
                                     <div className="flex items-start justify-between mb-3">
                                       <h5 className="text-sm font-semibold text-slate-900">{fb.point}</h5>
-                                      <span className={`text-lg font-bold ${getScoreColor(score)}`}>{score}%</span>
+                                      {score > 0 && (
+                                        <span className={`text-lg font-bold ${getScoreColor(score)}`}>{score}%</span>
+                                      )}
                                     </div>
                                     
-                                    {/* Progress Bar */}
-                                    <div className="h-2 w-full rounded-full bg-slate-200 mb-3">
-                                      <div className={`h-2 rounded-full ${getBarColor(score)}`} style={{ width: `${score}%` }} />
-                                    </div>
-
-                                    {/* Feedback Text */}
-                                    <p className="text-sm text-slate-600 mb-3">{fb.feedback}</p>
-
-                                    {/* Interview Tip */}
-                                    {fb.interview_tip && (
-                                      <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 mt-3">
-                                        <Lightbulb className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                                        <p className="text-xs text-amber-800"><strong>Tip:</strong> {fb.interview_tip}</p>
+                                    {/* Progress Bar - only show if score exists */}
+                                    {score > 0 && (
+                                      <div className="h-2 w-full rounded-full bg-slate-200 mb-3">
+                                        <div className={`h-2 rounded-full ${getBarColor(score)}`} style={{ width: `${score}%` }} />
                                       </div>
+                                    )}
+
+                                    {/* English Practice Format */}
+                                    {isEnglishPractice ? (
+                                      <div className="space-y-3">
+                                        {fb.error && (
+                                          <div className="rounded-lg bg-red-50 p-3 border border-red-100">
+                                            <p className="text-xs font-semibold text-red-800 mb-1">❌ Error Found:</p>
+                                            <p className="text-sm text-red-700 italic">"{fb.error}"</p>
+                                          </div>
+                                        )}
+                                        
+                                        {fb.correction && (
+                                          <div className="rounded-lg bg-green-50 p-3 border border-green-100">
+                                            <p className="text-xs font-semibold text-green-800 mb-1">✅ Correct Usage:</p>
+                                            <p className="text-sm text-green-700 font-medium">"{fb.correction}"</p>
+                                          </div>
+                                        )}
+                                        
+                                        {fb.explanation && (
+                                          <div className="rounded-lg bg-blue-50 p-3 border border-blue-100">
+                                            <p className="text-xs font-semibold text-blue-800 mb-1">💡 Explanation:</p>
+                                            <p className="text-sm text-blue-700">{fb.explanation}</p>
+                                          </div>
+                                        )}
+                                        
+                                        {fb.tip && (
+                                          <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 border border-amber-100">
+                                            <Lightbulb className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                            <div>
+                                              <p className="text-xs font-semibold text-amber-800 mb-1">Pro Tip:</p>
+                                              <p className="text-sm text-amber-700">{fb.tip}</p>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      /* Standard Interview Format */
+                                      <>
+                                        {/* Feedback Text */}
+                                        <p className="text-sm text-slate-600 mb-3">{fb.feedback}</p>
+
+                                        {/* Interview Tip */}
+                                        {fb.interview_tip && (
+                                          <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 mt-3">
+                                            <Lightbulb className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                            <p className="text-xs text-amber-800"><strong>Tip:</strong> {fb.interview_tip}</p>
+                                          </div>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 )

@@ -692,11 +692,11 @@ feedbackPrompt: `Analyze language proficiency and natural conversation flow.
 
 
 
-Return ONLY a JSON array:
+Return ONLY a JSON array with these objects:
 
 [{
 
-"point": "Grammar/Indianism/Vocabulary/Fluency",
+"point": "Fluency/Common phrasing",
 
 "error": "Quote the EXACT phrase or pattern they used incorrectly (e.g., 'I am doing the needful', 'Please revert back to me', 'Beta student').",
 
@@ -706,9 +706,55 @@ Return ONLY a JSON array:
 
 "tip": "ONE actionable rule to avoid this in future (e.g., 'In casual conversations, use contractions like I'll, don't, can't to sound natural')."
 
+},
+
+{
+
+"point": "Vocabulary/Pronunciation",
+
+"error": "...",
+
+"correction": "...",
+
+"explanation": "...",
+
+"tip": "..."
+
+},
+
+{
+
+"point": "Grammar",
+
+"error": "...",
+
+"correction": "...",
+
+"explanation": "...",
+
+"tip": "..."
+
+},
+
+{
+
+"point": "Overall Performance",
+
+"overall_score": 0-100,
+
+"feedback": "Overall assessment in 2-3 sentences. Mention: fluency level (beginner/intermediate/advanced), confidence, naturalness. Be encouraging but honest.",
+
+"strength": true/false
+
 }].
 
-Minimum 2-3 points per conversation. Be encouraging but specific. Focus on common Indian English patterns like: do the needful, revert back, prepone, updation, out of station, mention not, pass out (for graduation), Beta (B.Tech), vest vestige (waste).`
+
+
+IMPORTANT: 
+- Include 2-3 specific error corrections
+- MUST include "Overall Performance" point with "overall_score" field (0-100)
+- Score based on: grammar accuracy (30%), fluency (30%), vocabulary (20%), natural phrasing (20%)
+- Be encouraging but specific. Focus on common Indian English patterns like: do the needful, revert back, prepone, updation, out of station, mention not, pass out (for graduation), Beta (B.Tech).`
 
 },
 
