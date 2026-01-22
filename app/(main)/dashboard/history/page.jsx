@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { UserContext } from '@/app/_context/UserContext'
 import { getUserDiscussions } from '@/services/firebase/discussionService'
 import { ChevronRight, Lightbulb, Calendar } from 'lucide-react'
+import { collection, query, orderBy, getDocs } from 'firebase/firestore'
+import { db } from '@/lib/firebaseConfig'
 
 export default function HistoryPage() {
   const ctx = useContext(UserContext)
@@ -14,6 +16,7 @@ export default function HistoryPage() {
   const [error, setError] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [activeTab, setActiveTab] = useState({})
+  const [messages, setMessages] = useState({})  // Store messages per discussionId
   const router = useRouter()
   const searchParams = useSearchParams()
   const expandParam = searchParams?.get('expand')
@@ -48,10 +51,27 @@ export default function HistoryPage() {
     }
   }, [expandParam, discussions])
 
+  const fetchMessages = async (discussionId) => {
+    if (messages[discussionId]) return  // Already fetched
+    try {
+      const messagesRef = collection(db, 'discussionRooms', discussionId, 'messages')
+      const q = query(messagesRef, orderBy('timestamp', 'asc'))
+      const snapshot = await getDocs(q)
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setMessages(prev => ({ ...prev, [discussionId]: msgs }))
+    } catch (error) {
+      console.error('Error fetching messages:', error)
+    }
+  }
+
   const toggleExpand = (id) => {
     setExpandedId(expandedId === id ? null : id)
     if (!activeTab[id]) {
       setActiveTab({ ...activeTab, [id]: 'summary' })
+    }
+    // Fetch messages when expanding
+    if (expandedId !== id) {
+      fetchMessages(id)
     }
   }
 
@@ -228,6 +248,16 @@ export default function HistoryPage() {
                         >
                           Detailed Report
                         </button>
+                        <button
+                          onClick={() => switchTab(discussion.id, 'conversation')}
+                          className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                            currentTab === 'conversation'
+                              ? 'bg-indigo-600 text-white shadow'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          Conversation
+                        </button>
                       </div>
 
                       {/* Tab Content */}
@@ -296,7 +326,7 @@ export default function HistoryPage() {
                               </div>
                             </div>
                           </div>
-                        ) : (
+                        ) : currentTab === 'detailed' ? (
                           <div className="space-y-4">
                             {/* Detailed Metrics */}
                             {discussion.feedback?.length > 0 ? (
@@ -383,6 +413,28 @@ export default function HistoryPage() {
                               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
                                 Detailed feedback will be available once analysis completes
                               </div>
+                            )}
+                          </div>
+                        ) : (
+                          // Conversation Tab
+                          <div className="space-y-4">
+                            {messages[discussion.id] ? (
+                              messages[discussion.id].map((msg, idx) => (
+                                <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                  <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                                    msg.sender === 'user'
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-200 text-slate-900'
+                                  }`}>
+                                    <p className="text-sm">{msg.message}</p>
+                                    <p className="text-xs opacity-70 mt-1">
+                                      {new Date(msg.timestamp?.toDate?.() || msg.timestamp).toLocaleTimeString()}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-center text-sm text-slate-500">Loading conversation...</div>
                             )}
                           </div>
                         )}
