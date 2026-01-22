@@ -48,7 +48,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   // ✅ 2 second pause detection
   // REDUCE minimum words from 5 to 2 for short responses
-  const SPEECH_PAUSE_THRESHOLD = 1500
+  const SPEECH_PAUSE_THRESHOLD = 3000  // Increased from 1500 to 3000ms for longer pauses
   const MIN_WORDS_FOR_RESPONSE = 2  // Changed from 5 to 2
 
   // Speech accumulation
@@ -201,7 +201,7 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       console.log(`🎙️ Starting ASR connection #${myId}`)
       
       const wsUrl =
-        `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=2000&vad_events=true&punctuate=true`
+        `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=3000&vad_events=true&punctuate=true`  // Increased utterance_end_ms from 2000 to 3000ms
       const ws = new WebSocket(wsUrl, ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY])
       wsRef.current = ws
 
@@ -526,7 +526,6 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
 
   const generateAIIntro = useCallback(async (room) => {
     try {
-      // ✅ LISTEN -> THINK: Start thinking when AI starts processing
       setIsThinking(true)
       setIsAiProcessing(false)
       setAiResponse('')
@@ -569,14 +568,17 @@ export const useWebSocketTranscription = (interviewContext, discussionRoomData, 
       setAiResponse(aiMessage)
       setConversationHistory(prev => [...prev, { role: 'assistant', content: aiMessage }])
 
-      // ✅ TTS will handle THINK -> SPEAK transition
       await sendTextToTTS(aiMessage)
+
+      // ✅ FIX: Interview started after AI greeting
+      setHasStartedInterview(true)
     } catch (e) {
       console.error('Error generating AI intro:', e)
       const fallback = 'Hello! Let\'s get started. Please introduce yourself briefly.'
       setAiResponse(fallback)
       setConversationHistory(prev => [...prev, { role: 'assistant', content: fallback }])
       await sendTextToTTS(fallback)
+      setHasStartedInterview(true) // ✅ Even on fallback
     }
   }, [sendTextToTTS])
 
