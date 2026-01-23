@@ -1,6 +1,6 @@
-# 🧠 AIInterviewPro – AI-powered Mock Interview & English Coach Platform
+# 🧠 InterviewPrime – AI-powered Mock Interview & English Coach Platform
 
-AIInterviewPro is an **AI-driven mock interview and English practice platform** that helps users prepare for technical and behavioral interviews through **real-time AI simulations**, **personalized feedback**, and **voice-based interactions**.
+InterviewPrime is an **AI-driven mock interview and English practice platform** that helps users prepare for technical and behavioral interviews through **real-time AI simulations**, **personalized feedback**, and **voice-based interactions**.
 
 ---
 
