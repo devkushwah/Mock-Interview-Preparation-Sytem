@@ -191,6 +191,12 @@ const PracticePartner = ({ credits = 0 }) => {
         name: 'Mixed Interview',
         description: 'Simulate a real interview with structured feedback.',
         iconType: 'mock'
+      },
+      {
+        id: 'projectDiscussion',
+        name: 'Project Discussion',
+        description: 'In-depth discussion focused solely on your projects, covering implementation, challenges, and learnings.',
+        iconType: 'project'  // New iconType for Project Discussion
       }
     ],
     []
@@ -223,6 +229,12 @@ const PracticePartner = ({ credits = 0 }) => {
         return (
           <svg xmlns='http://www.w3.org/2000/svg' className='h-7 w-7 text-orange-600' viewBox='0 0 24 24' fill='currentColor'>
             <path d='M3 3h18v14H3zM7 20v-3h10v3H7z' />
+          </svg>
+        )
+      case 'project':  // New case for Project Discussion
+        return (
+          <svg xmlns='http://www.w3.org/2000/svg' className='h-7 w-7 text-purple-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={1.5} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
           </svg>
         )
       default:
