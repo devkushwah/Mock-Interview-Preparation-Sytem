@@ -186,12 +186,12 @@ const PracticePartner = ({ credits = 0 }) => {
         description: 'Boost your fluency and professional communication.',
         iconType: 'english'
       },
-      {
-        id: 'mock',
-        name: 'Mixed Interview',
-        description: 'Simulate a real interview with structured feedback.',
-        iconType: 'mock'
-      },
+      // {
+      //   id: 'mock',
+      //   name: 'Mixed Interview',
+      //   description: 'Simulate a real interview with structured feedback.',
+      //   iconType: 'mock'
+      // },
       {
         id: 'projectDiscussion',
         name: 'Project Discussion',
