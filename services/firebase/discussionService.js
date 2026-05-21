@@ -361,6 +361,54 @@ export const incrementDiscussionCounters = async (discussionId, { questions = 0,
 
 /** ---------------- Full Feedback Generation ---------------- **/
 
+const stripJsonCodeFences = (text) =>
+  String(text || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/```\s*json\s*/gi, '')
+    .replace(/```/g, '')
+
+const extractFirstJsonArray = (rawText) => {
+  const text = stripJsonCodeFences(rawText).trim()
+  const start = text.indexOf('[')
+  if (start === -1) return null
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === '[') depth++
+    if (ch === ']') {
+      depth--
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+
+  return null
+}
+
 export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOption, topic, userId) => {
   try {
     // Credit check and deduction for feedback
@@ -406,7 +454,7 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
     const feedbackPrompt = expert.feedbackPrompt.replace('{user_topic}', topic || 'general topics')
 
     const fullPrompt =
-      `Provide feedback as a JSON array of objects, each with "point", "feedback", and "strength" (boolean). Output only the JSON array, nothing else.\n\n${feedbackPrompt}\n\nFull Conversation:\n${conversationSummary}`
+      `Provide feedback as a JSON array of objects, each with "point", "feedback", and "strength" (boolean). Output only the JSON array (starting with '[' and ending with ']'). Do not wrap it in markdown or code fences.\n\n${feedbackPrompt}\n\nFull Conversation:\n${conversationSummary}`
 
     // Pass tier to AIModel so it routes correctly
     const contextForModel = { topic, role, experience, tier }
@@ -425,16 +473,15 @@ export const generateAndSaveFullFeedback = async (discussionRoomId, practiceOpti
 
     if (result.success && result.response) {
       try {
-        let cleanedResponse = result.response
-          .replace(/```json\s*/g, '')
-          .replace(/\s*```/g, '')
-          .trim()
-        if (!cleanedResponse.startsWith('[')) throw new Error('Response does not start with array')
-        feedbackArray = JSON.parse(cleanedResponse)
+        const arrayText = extractFirstJsonArray(result.response)
+        if (!arrayText) throw new Error('No JSON array found in AI response')
+        feedbackArray = JSON.parse(arrayText)
         if (!Array.isArray(feedbackArray)) throw new Error('AI did not return array')
       } catch (e) {
-        console.error('JSON parse failed, using fallback parsing:', e)
-        const lines = result.response.split('\n').filter(line => line.trim().length > 0)
+        console.warn('JSON parse failed, using fallback parsing:', e)
+        const lines = stripJsonCodeFences(result.response)
+          .split('\n')
+          .filter(line => line.trim().length > 0)
         feedbackArray = lines.map((line, index) => ({
           point: `Feedback Point ${index + 1}`,
           feedback: line.replace(/^- /, '').trim(),
